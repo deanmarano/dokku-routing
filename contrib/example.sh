@@ -7,6 +7,8 @@
 
 # Capabilities this plugin imposes on one app.
 # Emit: <capability-key><TAB><detail><TAB><source>
+# The source prefix before ':' must match the plugin name used in
+# contrib_proxy_support, or the two declarations never get connected.
 contrib_app_capabilities() {
   local app="$1"
 

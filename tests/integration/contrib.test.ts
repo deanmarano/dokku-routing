@@ -9,7 +9,7 @@ const DROP_IN = '/var/lib/dokku/data/routing/contrib/routing-test-fixture.sh';
 const FIXTURE = `
 contrib_app_capabilities() {
   [[ "$1" == "${APP}" ]] || return 0
-  printf 'forward-auth\\tprotected by a test fixture\\ttest:protect\\n'
+  printf 'forward-auth\\tprotected by a test fixture\\ttest-fixture:protect\\n'
 }
 
 contrib_proxy_support() {
@@ -41,7 +41,7 @@ describe('third-party capability contributions', () => {
     const data = await dokku.json('report', APP);
     const auth = data.capabilities.find((c: any) => c.key === 'forward-auth');
     expect(auth).toBeDefined();
-    expect(auth.source).toBe('test:protect');
+    expect(auth.source).toBe('test-fixture:protect');
   });
 
   it('only attributes the capability to the app the plugin named', async () => {

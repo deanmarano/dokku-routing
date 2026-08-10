@@ -72,6 +72,12 @@ printf 'sso\ttraefik\tfull\tforwardAuth middleware\n'
 printf 'sso\tcaddy\tnone\tno Caddy integration yet\n'
 ```
 
+**The plugin name here must match the prefix you use in `source`.** That is the
+only thing tying a contributed capability to its declaration: a capability
+sourced `sso:protect` is matched against the plugin named `sso`. Declare
+yourself as `dokku-sso` while sourcing `sso:protect` and the two never meet --
+your declaration is silently ignored and the app looks freely movable.
+
 This is load-bearing, not decorative. A capability you contribute is only as
 portable as you are: Traefik grades forward auth as fully supported, so without
 this declaration `routing:plan myapp traefik` would cheerfully approve moving an
