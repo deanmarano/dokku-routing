@@ -216,12 +216,19 @@ routing_provider_exists() {
   [[ -f "$(routing_provider_path "$1")" ]]
 }
 
+ROUTING_PROVIDERS_LOADED=""
+ROUTING_PROVIDERS=""
 routing_list_providers() {
-  local f
-  for f in "$PLUGIN_PROVIDER_ROOT"/*; do
-    [[ -f "$f" ]] || continue
-    basename "$f"
-  done
+  [[ -n "$ROUTING_PROVIDERS_LOADED" ]] || {
+    local f
+    for f in "$PLUGIN_PROVIDER_ROOT"/*; do
+      [[ -f "$f" ]] || continue
+      ROUTING_PROVIDERS+="${f##*/}"$'\n'
+    done
+    ROUTING_PROVIDERS="${ROUTING_PROVIDERS%$'\n'}"
+    ROUTING_PROVIDERS_LOADED="yes"
+  }
+  printf '%s\n' "$ROUTING_PROVIDERS"
 }
 
 # Echo one declared metadata variable from an adapter.
@@ -447,16 +454,26 @@ routing_detect_vendor_settings() {
 
 # routing_classify <capability> <target-proxy>
 # -> portable | translatable | manual | unsupported
+#
+# Also sets ROUTING_CLASS. A full summary classifies thousands of times, and
+# every `$(...)` is a fork; callers in that loop read the variable instead.
+# Kept free of command substitution internally for the same reason.
 routing_classify() {
   local cap="$1" target="$2" level ownership
-  level="$(routing_provider_level "$target" "$cap")"
-  ownership="$(routing_capability_field "$cap" ownership || echo proxy)"
+  routing_load_levels
+  level="${ROUTING_LEVEL["$target|$cap"]:-none}"
+  ownership="${ROUTING_CAP_FIELD["$cap|ownership"]:-proxy}"
 
-  [[ "$level" == "none" ]] && { echo unsupported; return; }
-  [[ "$ownership" == "opaque" ]] && { echo manual; return; }
-  [[ "$level" == "partial" ]] && { echo manual; return; }
-  [[ "$ownership" == "dokku" ]] && { echo portable; return; }
-  echo translatable
+  if [[ "$level" == "none" ]]; then
+    ROUTING_CLASS="unsupported"
+  elif [[ "$ownership" == "opaque" || "$level" == "partial" ]]; then
+    ROUTING_CLASS="manual"
+  elif [[ "$ownership" == "dokku" ]]; then
+    ROUTING_CLASS="portable"
+  else
+    ROUTING_CLASS="translatable"
+  fi
+  printf '%s\n' "$ROUTING_CLASS"
 }
 
 routing_class_symbol() {
