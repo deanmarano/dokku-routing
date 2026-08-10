@@ -36,6 +36,92 @@ routing_report_field() {
   return 1
 }
 
+# --- Report cache -----------------------------------------------------------
+#
+# `dokku <plugin>:report` with no app returns every app in one invocation.
+# Summarising 40 apps one call at a time costs minutes; pre-warming costs
+# one call per plugin. Single-app commands skip the pre-warm and fetch just
+# the app they need, so they pay nothing for this.
+
+declare -gA ROUTING_REPORT=()
+ROUTING_REPORT_BULK=""
+
+# Fetch every app's report for each named plugin in a single call.
+routing_prewarm_reports() {
+  local plugin out line app
+  for plugin in "$@"; do
+    [[ " $ROUTING_REPORT_BULK " == *" $plugin "* ]] && continue
+    ROUTING_REPORT_BULK+=" $plugin"
+
+    out="$(routing_dokku "$plugin:report")"
+    app=""
+    while IFS= read -r line; do
+      # Blocks are introduced by "=====> <app> <plugin> information".
+      if [[ "$line" == "=====>"* ]]; then
+        read -r _ app _ <<<"$line"
+        ROUTING_REPORT["$plugin|$app"]=""
+        continue
+      fi
+      [[ -n "$app" ]] && ROUTING_REPORT["$plugin|$app"]+="$line"$'\n'
+    done <<<"$out"
+  done
+}
+
+# One app's report block, from the cache when we have it.
+routing_report() {
+  local plugin="$1" app="$2" key="$1|$2"
+  [[ -n "${ROUTING_REPORT[$key]+set}" ]] || \
+    ROUTING_REPORT["$key"]="$(routing_dokku "$plugin:report" "$app")"
+  printf '%s' "${ROUTING_REPORT[$key]}"
+}
+
+# Warm every report one app needs, in the caller's shell.
+#
+# Detectors run in subshells and command substitution is itself a subshell, so
+# a cache filled inside `$( )` is discarded. Filling it here means the whole
+# analysis of one app costs one call per report rather than one per lookup.
+routing_prewarm_app() {
+  local app="$1" proxy
+  routing_report proxy "$app" >/dev/null
+  proxy="$(routing_app_proxy "$app")"
+
+  routing_report domains "$app" >/dev/null
+  routing_report ports "$app" >/dev/null
+  routing_report checks "$app" >/dev/null
+
+  if routing_provider_exists "$proxy" && routing_provider_inspects "$proxy"; then
+    routing_report "$proxy" "$app" >/dev/null
+    [[ "$proxy" == "traefik" ]] && routing_report docker-options "$app" >/dev/null
+  fi
+
+  routing_acme_apps >/dev/null
+  routing_trigger_exists || true
+}
+
+# Apps with a dokku-letsencrypt certificate. Read once; the list is global.
+ROUTING_ACME_LOADED=""
+ROUTING_ACME_APPS=""
+routing_acme_apps() {
+  [[ -n "$ROUTING_ACME_LOADED" ]] || {
+    ROUTING_ACME_APPS="$(routing_dokku letsencrypt:list | awk 'NR>1 {print $1}')"
+    ROUTING_ACME_LOADED="yes"
+  }
+  printf '%s' "$ROUTING_ACME_APPS"
+}
+
+# Does any installed plugin implement our trigger? Asking plugn per app when
+# nothing implements it is pure overhead.
+ROUTING_TRIGGER_CHECKED=""
+ROUTING_TRIGGER_EXISTS=""
+routing_trigger_exists() {
+  [[ -n "$ROUTING_TRIGGER_CHECKED" ]] || {
+    ROUTING_TRIGGER_CHECKED="yes"
+    compgen -G "${DOKKU_LIB_ROOT:-/var/lib/dokku}/plugins/enabled/*/routing-app-capabilities" \
+      >/dev/null && ROUTING_TRIGGER_EXISTS="yes"
+  }
+  [[ -n "$ROUTING_TRIGGER_EXISTS" ]]
+}
+
 routing_app_exists() {
   "$DOKKU_BIN" apps:exists "$1" &>/dev/null
 }
@@ -45,17 +131,23 @@ routing_list_apps() {
 }
 
 # The proxy an app is currently routed through.
+#
+# "Proxy type" holds only an explicit per-app override and is usually empty;
+# the proxy actually in front of the app is the computed value, which folds in
+# the global default. Reading the wrong one reports every app on the global
+# proxy as nginx.
 routing_app_proxy() {
   local app="$1" report proxy
-  report="$(routing_dokku proxy:report "$app")"
-  proxy="$(routing_report_field "$report" "Proxy type" || true)"
+  report="$(routing_report proxy "$app")"
+  proxy="$(routing_report_field "$report" "Proxy computed type" || true)"
+  [[ -z "$proxy" ]] && proxy="$(routing_report_field "$report" "Proxy type" || true)"
   [[ -z "$proxy" ]] && proxy="nginx"
   echo "$proxy"
 }
 
 routing_app_proxy_enabled() {
   local app="$1" report enabled
-  report="$(routing_dokku proxy:report "$app")"
+  report="$(routing_report proxy "$app")"
   enabled="$(routing_report_field "$report" "Proxy enabled" || true)"
   [[ "$enabled" == "false" ]] && return 1
   return 0
@@ -176,7 +268,7 @@ routing_provider_installed() {
 routing_contrib_app_capabilities() {
   local app="$1" f
 
-  if command -v "$PLUGN_BIN" &>/dev/null; then
+  if routing_trigger_exists && command -v "$PLUGN_BIN" &>/dev/null; then
     "$PLUGN_BIN" trigger routing-app-capabilities "$app" 2>/dev/null || true
   fi
 
@@ -231,22 +323,25 @@ routing_app_capabilities() {
 routing_detect_common() {
   local app="$1" report value
 
-  report="$(routing_dokku domains:report "$app")"
+  report="$(routing_report domains "$app")"
   value="$(routing_report_field "$report" "Domains app vhosts" || true)"
   if [[ -n "$value" ]]; then
     printf 'domains\t%s\tdomains\n' "$value"
     [[ "$value" == *"*"* ]] && printf 'wildcard-domains\t%s\tdomains\n' "$value"
   fi
 
-  report="$(routing_dokku proxy:report "$app")"
-  value="$(routing_report_field "$report" "Proxy port map" || true)"
+  # Port maps live in ports:report, not proxy:report. "Ports map detected" is
+  # what the image exposes, which is not a routing decision -- only the
+  # configured map is.
+  report="$(routing_report ports "$app")"
+  value="$(routing_report_field "$report" "Ports map" || true)"
   if [[ -n "$value" ]]; then
-    printf 'port-mapping\t%s\tproxy:ports\n' "$value"
+    printf 'port-mapping\t%s\tports:set\n' "$value"
     local mapping
     for mapping in $value; do
       case "${mapping%%:*}" in
         http | https) ;;
-        *) printf 'non-http-ports\t%s\tproxy:ports\n' "$mapping" ;;
+        *) printf 'non-http-ports\t%s\tports:set\n' "$mapping" ;;
       esac
     done
   fi
@@ -256,17 +351,21 @@ routing_detect_common() {
     printf 'tls-custom-cert\t%s\tcerts\n' "$DOKKU_ROOT/$app/tls/server.crt"
   fi
 
-  if routing_dokku letsencrypt:list | awk 'NR>1 {print $1}' | grep -qx "$app"; then
+  if routing_acme_apps | grep -qx "$app"; then
     printf 'tls-acme\tmanaged by dokku-letsencrypt\tletsencrypt\n'
   fi
 
-  report="$(routing_dokku checks:report "$app")"
+  # Only checks someone actually changed. "Wait to retire" is almost always the
+  # inherited default, so a skipped or disabled list is the real signal.
+  report="$(routing_report checks "$app")"
+  local key
+  for key in "disabled list" "skipped list"; do
+    value="$(routing_report_field "$report" "Checks $key" || true)"
+    [[ -z "$value" || "$value" == "none" ]] && continue
+    printf 'deploy-checks\t%s=%s\tchecks\n' "${key// /-}" "$value"
+  done
   value="$(routing_report_field "$report" "Checks wait to retire" || true)"
-  local skipped
-  skipped="$(routing_report_field "$report" "Checks skipped" || true)"
-  if [[ -n "$value" && "$skipped" != "_all_" ]]; then
-    printf 'deploy-checks\twait-to-retire=%s\tchecks\n' "$value"
-  fi
+  [[ -n "$value" ]] && printf 'deploy-checks\twait-to-retire=%s\tchecks\n' "$value"
 }
 
 # Report app-level properties from a `dokku <plugin>:report` block as vendor

@@ -52,12 +52,12 @@ proxy_detect() {
 
   routing_detect_common "$app"
 
-  report="$(routing_dokku traefik:report "$app")"
+  report="$(routing_report traefik "$app")"
   routing_detect_vendor_settings "$report" "Traefik" "traefik:set" '^last visited at'
 
   # Traefik is configured by Docker labels, so labels attached through
   # docker-options are part of this app's routing surface.
-  labels="$(routing_dokku docker-options:report "$app" | grep -o 'traefik\.[^ "]*' || true)"
+  labels="$(routing_report docker-options "$app" | grep -o 'traefik\.[^ "]*' || true)"
   while IFS= read -r label; do
     [[ -z "$label" ]] && continue
     case "$label" in

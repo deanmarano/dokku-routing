@@ -52,7 +52,7 @@ proxy_detect() {
 
   routing_detect_common "$app"
 
-  report="$(routing_dokku nginx:report "$app")"
+  report="$(routing_report nginx "$app")"
 
   value="$(routing_report_field "$report" "Nginx client max body size" || true)"
   [[ -n "$value" ]] && printf 'body-size-limit\tclient-max-body-size=%s\tnginx:set\n' "$value"

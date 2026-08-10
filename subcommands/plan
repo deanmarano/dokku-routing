@@ -26,6 +26,7 @@ if ! routing_provider_exists "$TARGET"; then
   exit 1
 fi
 
+routing_prewarm_app "$APP"
 CURRENT="$(routing_app_proxy "$APP")"
 
 if [[ "$CURRENT" == "$TARGET" ]]; then

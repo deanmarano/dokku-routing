@@ -13,6 +13,30 @@ routing_load_levels
 
 APPS="$(routing_list_apps)"
 
+# Summarising every app is the one place where per-app `dokku *:report` calls
+# dominate the runtime. Fetch each report for all apps up front instead, and
+# warm the global lookups so the per-app subshells inherit them rather than
+# each recomputing.
+routing_prewarm_reports proxy domains ports checks
+routing_acme_apps >/dev/null
+routing_trigger_exists || true
+
+# Now that proxy:report is cached, we know which proxies are actually in use
+# and can fetch only those adapters' reports rather than every proxy Dokku
+# happens to have installed.
+IN_USE=""
+while read -r app; do
+  [[ -z "$app" ]] && continue
+  proxy="$(routing_app_proxy "$app")"
+  [[ " $IN_USE " == *" $proxy "* ]] || IN_USE+=" $proxy"
+done <<<"$APPS"
+
+for proxy in $IN_USE; do
+  routing_provider_exists "$proxy" && routing_provider_inspects "$proxy" &&
+    routing_prewarm_reports "$proxy"
+done
+[[ " $IN_USE " == *" traefik "* ]] && routing_prewarm_reports docker-options
+
 # For one app: current proxy, capability count, whether custom config is
 # involved, and which targets it could move to without losing anything.
 analyze() {
