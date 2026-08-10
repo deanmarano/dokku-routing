@@ -132,6 +132,32 @@ later requires no changes elsewhere.
 Adapters are sourced in subshells, so several can be interrogated in one run
 without their functions colliding.
 
+### A note on cost
+
+Auditing a fleet means asking Dokku the same questions for every app, and the
+obvious implementation is slow enough to be useless — 40 apps took over a
+minute. Three things fix it, and all three are easy to undo by accident:
+
+- **Bulk reports.** `dokku <plugin>:report` with no app returns every app in
+  one call. The summary pre-warms a cache; single-app commands fetch only what
+  they need.
+- **Single-field reports.** `ports:report` inspects each app's image to compute
+  its detected ports — 11.9s across 40 apps, against 0.13s for `--ports-map`,
+  which is the only part we want. Same for `domains`. In bulk these print one
+  bare line per app in `apps:list` order, so the positional mapping is trusted
+  only when the line count matches the app count, falling back to full reports
+  otherwise.
+- **Not forking.** Every `$(...)` is a fork, and classification runs thousands
+  of times. `routing_classify` avoids command substitution internally and
+  publishes `ROUTING_CLASS` so hot loops can read a variable instead.
+
+The same subtlety bites all three: command substitution is a subshell, so a
+cache filled inside `$( )` is discarded. Caches are warmed by calling the
+function directly, in the caller's shell, and detectors — which do run in
+subshells — inherit them read-only.
+
+Together: 102s to 9.7s for a 40-app summary, 2.4s to 1.0s for one app.
+
 ### Other plugins
 
 A plugin that changes routing -- an SSO plugin adding forward auth, say --
