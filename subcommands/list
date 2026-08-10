@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_ROOT/config"
+source "$PLUGIN_ROOT/functions"
+
+[[ "${1:-}" == router:* ]] && shift
+router_parse_format "$@"
+
+emit_text() {
+  local provider status
+  local -a installed=() available=()
+
+  for provider in $(router_list_providers); do
+    if router_provider_installed "$provider"; then
+      installed+=("$provider")
+    else
+      available+=("$provider")
+    fi
+  done
+
+  echo "Installed"
+  echo
+  if [[ ${#installed[@]} -eq 0 ]]; then
+    echo "  (none detected)"
+  fi
+  for provider in "${installed[@]:-}"; do
+    [[ -z "$provider" ]] && continue
+    status="full inspection"
+    router_provider_inspects "$provider" || status="capabilities only"
+    printf '  ✓ %-12s %s (%s)\n' "$provider" "$(router_provider_meta "$provider" PROXY_DESCRIPTION)" "$status"
+  done
+
+  echo
+  echo "Available"
+  echo
+  for provider in "${available[@]:-}"; do
+    [[ -z "$provider" ]] && continue
+    status="full inspection"
+    router_provider_inspects "$provider" || status="capabilities only"
+    printf '  • %-12s %s (%s)\n' "$provider" "$(router_provider_meta "$provider" PROXY_DESCRIPTION)" "$status"
+  done
+
+  local support
+  support="$(router_contrib_proxy_support)"
+  if [[ -n "$support" ]]; then
+    echo
+    echo "Declared by other plugins"
+    echo
+    printf '  %-16s %-12s %-8s %s\n' "PLUGIN" "PROXY" "SUPPORT" "NOTE"
+    while IFS=$'\t' read -r plugin proxy level note; do
+      [[ -z "$plugin" ]] && continue
+      printf '  %-16s %-12s %-8s %s\n' "$plugin" "$proxy" "$level" "$note"
+    done <<<"$support"
+  fi
+}
+
+emit_json() {
+  local provider first=1
+  printf '{"proxies":['
+  for provider in $(router_list_providers); do
+    [[ $first -eq 0 ]] && printf ','
+    first=0
+    printf '{"name":%s,"description":%s,"installed":%s,"inspection":%s}' \
+      "$(router_json_string "$provider")" \
+      "$(router_json_string "$(router_provider_meta "$provider" PROXY_DESCRIPTION)")" \
+      "$(router_provider_installed "$provider" && echo true || echo false)" \
+      "$(router_json_string "$(router_provider_meta "$provider" PROXY_INSPECTION)")"
+  done
+  printf '],"contributions":['
+
+  first=1
+  while IFS=$'\t' read -r plugin proxy level note; do
+    [[ -z "$plugin" ]] && continue
+    [[ $first -eq 0 ]] && printf ','
+    first=0
+    printf '{"plugin":%s,"proxy":%s,"support":%s,"note":%s}' \
+      "$(router_json_string "$plugin")" "$(router_json_string "$proxy")" \
+      "$(router_json_string "$level")" "$(router_json_string "$note")"
+  done <<<"$(router_contrib_proxy_support)"
+  printf ']}\n'
+}
+
+if [[ "$ROUTER_FORMAT" == "json" ]]; then
+  emit_json
+else
+  emit_text
+fi

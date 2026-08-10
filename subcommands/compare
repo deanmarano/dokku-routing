@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_ROOT/config"
+source "$PLUGIN_ROOT/functions"
+
+[[ "${1:-}" == router:* ]] && shift
+router_parse_format "$@"
+set -- "${ROUTER_ARGS[@]:-}"
+
+LEFT="${1:-}"
+RIGHT="${2:-}"
+
+if [[ -z "$LEFT" || -z "$RIGHT" ]]; then
+  echo "Usage: dokku router:compare <proxy> <proxy> [--format json]" >&2
+  exit 1
+fi
+
+for proxy in "$LEFT" "$RIGHT"; do
+  if ! router_provider_exists "$proxy"; then
+    echo "!     Unknown proxy '$proxy'. Run 'dokku router:list' to see the options." >&2
+    exit 1
+  fi
+done
+
+router_load_levels
+
+emit_text() {
+  printf '%-34s %-12s %-12s\n' "CAPABILITY" "$LEFT" "$RIGHT"
+  printf '%-34s %-12s %-12s\n' "----------" "------------" "------------"
+
+  local key label category last_category="" left right
+  while IFS='|' read -r key label category _; do
+    if [[ "$category" != "$last_category" ]]; then
+      [[ -n "$last_category" ]] && echo
+      last_category="$category"
+    fi
+    left="$(router_level_symbol "$(router_provider_level "$LEFT" "$key")")"
+    right="$(router_level_symbol "$(router_provider_level "$RIGHT" "$key")")"
+    printf '%-34s %-12s %-12s\n' "$label" "  $left" "  $right"
+  done <<<"$(router_capability_registry)"
+
+  echo
+  echo "✓ supported   ~ partial   ✗ unsupported"
+
+  # Only the differences actually drive a migration decision, so call them out.
+  echo
+  echo "Differences that matter moving $LEFT -> $RIGHT:"
+  local found=0
+  while IFS='|' read -r key label _ _; do
+    left="$(router_provider_level "$LEFT" "$key")"
+    right="$(router_provider_level "$RIGHT" "$key")"
+    [[ "$left" == "$right" ]] && continue
+    [[ "$left" == "none" ]] && continue
+    if [[ "$right" == "none" || ("$left" == "full" && "$right" == "partial") ]]; then
+      found=1
+      printf '  %s %s' "$(router_class_symbol "$([[ "$right" == none ]] && echo unsupported || echo manual)")" "$label"
+      local note
+      note="$(router_provider_note "$RIGHT" "$key")"
+      [[ -n "$note" ]] && printf ' -- %s' "$note"
+      printf '\n'
+    fi
+  done <<<"$(router_capability_registry)"
+  [[ $found -eq 0 ]] && echo "  (none -- $RIGHT covers everything $LEFT does)"
+}
+
+emit_json() {
+  local key label first=1
+  printf '{"left":%s,"right":%s,"capabilities":[' \
+    "$(router_json_string "$LEFT")" "$(router_json_string "$RIGHT")"
+  while IFS='|' read -r key label category _; do
+    [[ $first -eq 0 ]] && printf ','
+    first=0
+    printf '{"key":%s,"label":%s,"category":%s,"left":%s,"right":%s,"left_note":%s,"right_note":%s}' \
+      "$(router_json_string "$key")" "$(router_json_string "$label")" \
+      "$(router_json_string "$category")" \
+      "$(router_json_string "$(router_provider_level "$LEFT" "$key")")" \
+      "$(router_json_string "$(router_provider_level "$RIGHT" "$key")")" \
+      "$(router_json_string "$(router_provider_note "$LEFT" "$key")")" \
+      "$(router_json_string "$(router_provider_note "$RIGHT" "$key")")"
+  done <<<"$(router_capability_registry)"
+  printf ']}\n'
+}
+
+if [[ "$ROUTER_FORMAT" == "json" ]]; then
+  emit_json
+else
+  emit_text
+fi

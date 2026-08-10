@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# nginx proxy adapter.
+
+# shellcheck disable=SC2034  # metadata read by the router plugin after sourcing
+PROXY_NAME="nginx"
+PROXY_DESCRIPTION="Dokku's default proxy: generated config files, reloaded on change"
+PROXY_DOKKU_PLUGIN="nginx-vhosts"
+PROXY_INSPECTION="full"
+
+proxy_capabilities() {
+  cat <<'EOF'
+domains	full
+wildcard-domains	full
+path-routing	partial	requires a custom nginx.conf.sigil template
+port-mapping	full
+non-http-ports	full
+weighted-routing	none	upstream weights are not exposed by Dokku
+sticky-sessions	none	needs a third-party module or hand-written config
+load-balancing	full	all app containers become upstream members
+tls	full
+tls-acme	partial	needs the separate dokku-letsencrypt plugin
+tls-custom-cert	full
+hsts	full	nginx:set hsts
+https-redirect	full	automatic once a certificate is present
+http2	full
+http3	none
+websockets	full
+grpc	partial	requires a custom template using grpc_pass
+proxy-timeouts	full	nginx:set proxy-read-timeout and friends
+body-size-limit	full	nginx:set client-max-body-size
+buffering	full	nginx:set proxy-buffering and buffer sizes
+compression	partial	global nginx configuration, not per app
+request-headers	partial	only via a custom template
+response-headers	partial	only via a custom template
+forwarded-headers	full	nginx:set x-forwarded-* values
+forward-auth	partial	auth_request in a custom template, or an SSO plugin
+basic-auth	partial	requires a custom template and an htpasswd file
+rate-limiting	partial	limit_req zones must be declared in a custom template
+ip-allowlist	partial	allow/deny directives in a custom template
+cors	none
+middleware	none	nginx has no composable middleware model
+deploy-checks	full
+health-checks	none	active upstream health checks are an nginx-plus feature
+access-logs	full	nginx:set access-log-path and access-log-format
+raw-config	full	nginx.conf.sigil and nginx.conf.d/*.conf
+vendor-settings	full	nginx:set
+EOF
+}
+
+proxy_detect() {
+  local app="$1" report value key
+
+  router_detect_common "$app"
+
+  report="$(router_dokku nginx:report "$app")"
+
+  value="$(router_report_field "$report" "Nginx client max body size" || true)"
+  [[ -n "$value" ]] && printf 'body-size-limit\tclient-max-body-size=%s\tnginx:set\n' "$value"
+
+  for key in "proxy read timeout" "proxy send timeout" "proxy connect timeout"; do
+    value="$(router_report_field "$report" "Nginx $key" || true)"
+    [[ -n "$value" ]] && printf 'proxy-timeouts\t%s=%s\tnginx:set\n' "${key// /-}" "$value"
+  done
+
+  for key in "proxy buffering" "proxy buffer size" "proxy buffers" "proxy busy buffers size"; do
+    value="$(router_report_field "$report" "Nginx $key" || true)"
+    [[ -n "$value" ]] && printf 'buffering\t%s=%s\tnginx:set\n' "${key// /-}" "$value"
+  done
+
+  value="$(router_report_field "$report" "Nginx hsts" || true)"
+  [[ "$value" == "true" ]] && printf 'hsts\tenabled\tnginx:set\n'
+
+  for key in "x forwarded for value" "x forwarded port value" "x forwarded proto value" "x forwarded ssl"; do
+    value="$(router_report_field "$report" "Nginx $key" || true)"
+    [[ -n "$value" ]] && printf 'forwarded-headers\t%s=%s\tnginx:set\n' "${key// /-}" "$value"
+  done
+
+  for key in "access log path" "access log format" "error log path"; do
+    value="$(router_report_field "$report" "Nginx $key" || true)"
+    [[ -n "$value" ]] && printf 'access-logs\t%s=%s\tnginx:set\n' "${key// /-}" "$value"
+  done
+
+  # Hand-written configuration. We deliberately do not parse it -- its very
+  # presence is the finding.
+  local sigil="$DOKKU_ROOT/$app/nginx.conf.sigil"
+  [[ -f "$sigil" ]] && printf 'raw-config\t%s\tcustom template\n' "$sigil"
+
+  local extra
+  for extra in "$DOKKU_ROOT/$app/nginx.conf.d"/*.conf; do
+    [[ -f "$extra" ]] || continue
+    printf 'raw-config\t%s\tnginx.conf.d\n' "$extra"
+  done
+
+  # Anything else set on the app that no capability above already claimed.
+  router_detect_vendor_settings "$report" "Nginx" "nginx:set" \
+    '^(client max body size|proxy (read|send|connect) timeout|proxy buffer|proxy buffers|proxy buffering|proxy buffer size|proxy busy buffers size|hsts|x forwarded|access log|error log|last visited at)'
+}

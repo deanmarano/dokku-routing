@@ -1,0 +1,7 @@
+[plugin]
+description = "Audit and plan migrations between Dokku proxy implementations"
+version = "0.1.0"
+authors = ["Dean Marano"]
+license = "MIT"
+
+[plugin.config]

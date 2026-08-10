@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Traefik proxy adapter.
+
+# shellcheck disable=SC2034  # metadata read by the router plugin after sourcing
+PROXY_NAME="traefik"
+PROXY_DESCRIPTION="Dynamic, container-aware routing driven by labels and middleware"
+PROXY_DOKKU_PLUGIN="traefik-vhosts"
+PROXY_INSPECTION="full"
+
+proxy_capabilities() {
+  cat <<'EOF'
+domains	full
+wildcard-domains	full
+path-routing	full	router rules match on PathPrefix
+port-mapping	full
+non-http-ports	full	TCP and UDP entrypoints
+weighted-routing	full	weighted round-robin services
+sticky-sessions	full	cookie-based stickiness
+load-balancing	full
+tls	full
+tls-acme	full	ACME is built into the proxy
+tls-custom-cert	partial	certificates must be published to Traefik's store
+hsts	full	headers middleware
+https-redirect	full	redirectScheme middleware
+http2	full
+http3	full
+websockets	full	no special configuration needed
+grpc	full	h2c backends
+proxy-timeouts	partial	set per transport, not per route
+body-size-limit	partial	buffering middleware, with different semantics
+buffering	full	buffering middleware
+compression	full	compress middleware
+request-headers	full	headers middleware
+response-headers	full	headers middleware
+forwarded-headers	full
+forward-auth	full	forwardAuth middleware
+basic-auth	full	basicAuth middleware
+rate-limiting	full	rateLimit middleware
+ip-allowlist	full	ipAllowList middleware
+cors	full	headers middleware
+middleware	full	first-class composable middleware
+deploy-checks	full
+health-checks	full	active service health checks
+access-logs	partial	configured globally, not per app
+raw-config	none	no equivalent to a hand-written vhost template
+vendor-settings	full	traefik:set and Docker labels
+EOF
+}
+
+proxy_detect() {
+  local app="$1" report labels
+
+  router_detect_common "$app"
+
+  report="$(router_dokku traefik:report "$app")"
+  router_detect_vendor_settings "$report" "Traefik" "traefik:set" '^last visited at'
+
+  # Traefik is configured by Docker labels, so labels attached through
+  # docker-options are part of this app's routing surface.
+  labels="$(router_dokku docker-options:report "$app" | grep -o 'traefik\.[^ "]*' || true)"
+  while IFS= read -r label; do
+    [[ -z "$label" ]] && continue
+    case "$label" in
+      *middlewares*) printf 'middleware\t%s\tdocker-options\n' "$label" ;;
+      *) printf 'vendor-settings\t%s\tdocker-options\n' "$label" ;;
+    esac
+  done <<<"$labels"
+}

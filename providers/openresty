@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# OpenResty adapter (capability declarations only -- no live inspection yet).
+
+# shellcheck disable=SC2034  # metadata read by the router plugin after sourcing
+PROXY_NAME="openresty"
+PROXY_DESCRIPTION="nginx plus LuaJIT, with ACME certificate issuance built in"
+PROXY_DOKKU_PLUGIN="openresty-vhosts"
+PROXY_INSPECTION="metadata"
+
+proxy_capabilities() {
+  cat <<'EOF'
+domains	full
+wildcard-domains	full
+path-routing	partial
+port-mapping	full
+non-http-ports	full	stream module
+weighted-routing	none
+sticky-sessions	none
+load-balancing	full
+tls	full
+tls-acme	full	lua-resty-acme, built into the proxy
+tls-custom-cert	full
+hsts	full
+https-redirect	full
+http2	full
+http3	none
+websockets	full
+grpc	partial
+proxy-timeouts	full
+body-size-limit	full
+buffering	full
+compression	partial	global configuration
+request-headers	partial
+response-headers	partial
+forwarded-headers	full
+forward-auth	partial	possible in Lua, but not plumbed through Dokku
+basic-auth	partial
+rate-limiting	partial	lua-resty-limit-traffic
+ip-allowlist	partial
+cors	none
+middleware	partial	Lua phase handlers, not a declarative chain
+deploy-checks	full
+health-checks	none
+access-logs	full
+raw-config	none	Dokku's OpenResty proxy has no custom template hook
+vendor-settings	full	openresty:set
+EOF
+}

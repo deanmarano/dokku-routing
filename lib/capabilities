@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Canonical capability registry.
+#
+# Every proxy adapter grades itself against these keys, and every detector
+# reports what an app uses in these terms. Adding a capability here is the
+# only place a new routing concern needs to be named.
+#
+# Format: key|label|category|ownership
+#
+# ownership decides how a used capability is classified when the target proxy
+# supports it:
+#
+#   dokku   Dokku core owns the state (domains, certs, port maps). It survives
+#           a proxy swap untouched, so it is portable as-is.
+#   proxy   The value is real and transferable, but each proxy spells it
+#           differently, so we have to re-express it -- automatically
+#           translatable.
+#   opaque  We cannot read the intent out of it (hand-written config, vendor
+#           labels). Always manual review, never auto-translated.
+
+router_capability_registry() {
+  cat <<'EOF'
+domains|Domains / virtual hosts|routing|dokku
+wildcard-domains|Wildcard domains|routing|dokku
+path-routing|Path-based routing|routing|proxy
+port-mapping|HTTP/HTTPS port mapping|routing|dokku
+non-http-ports|Non-HTTP (TCP/UDP) ports|routing|dokku
+weighted-routing|Weighted / canary routing|routing|proxy
+sticky-sessions|Sticky sessions|routing|proxy
+load-balancing|Multi-container load balancing|routing|proxy
+tls|TLS termination|tls|dokku
+tls-acme|Built-in ACME / Let's Encrypt|tls|proxy
+tls-custom-cert|Operator-supplied certificates|tls|dokku
+hsts|HSTS headers|tls|proxy
+https-redirect|HTTP to HTTPS redirect|tls|proxy
+http2|HTTP/2|protocol|proxy
+http3|HTTP/3 / QUIC|protocol|proxy
+websockets|WebSocket upgrades|protocol|proxy
+grpc|gRPC proxying|protocol|proxy
+proxy-timeouts|Read / send / connect timeouts|traffic|proxy
+body-size-limit|Request body size limit|traffic|proxy
+buffering|Response buffering controls|traffic|proxy
+compression|Response compression|traffic|proxy
+request-headers|Request header manipulation|traffic|proxy
+response-headers|Response header manipulation|traffic|proxy
+forwarded-headers|X-Forwarded-* handling|traffic|proxy
+forward-auth|Forward authentication|security|proxy
+basic-auth|HTTP basic auth|security|proxy
+rate-limiting|Rate limiting|security|proxy
+ip-allowlist|IP allow/deny lists|security|proxy
+cors|CORS handling|security|proxy
+middleware|Composable middleware chains|config|proxy
+deploy-checks|Zero-downtime deploy checks|observability|dokku
+health-checks|Proxy-level health checks|observability|proxy
+access-logs|Access log location / format|observability|proxy
+raw-config|Hand-written proxy config|config|opaque
+vendor-settings|Proxy-specific settings|config|opaque
+EOF
+}
+
+# Look up one field of a capability. Returns non-zero for unknown keys.
+router_capability_field() {
+  local key="$1" field="$2" line
+  line="$(router_capability_registry | grep "^${key}|" || true)"
+  [[ -z "$line" ]] && return 1
+  IFS='|' read -r _ label category ownership <<<"$line"
+  case "$field" in
+    label) echo "$label" ;;
+    category) echo "$category" ;;
+    ownership) echo "$ownership" ;;
+    *) return 1 ;;
+  esac
+}
+
+router_capability_label() {
+  router_capability_field "$1" label || echo "$1"
+}
+
+router_capability_exists() {
+  router_capability_registry | grep -q "^${1}|"
+}

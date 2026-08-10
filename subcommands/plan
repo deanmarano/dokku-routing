@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_ROOT/config"
+source "$PLUGIN_ROOT/functions"
+
+[[ "${1:-}" == router:* ]] && shift
+
+APP="${1:-}"
+TARGET="${2:-}"
+
+if [[ -z "$APP" || -z "$TARGET" ]]; then
+  echo "Usage: dokku router:plan <app> <target-proxy>" >&2
+  exit 1
+fi
+
+if ! router_app_exists "$APP"; then
+  echo "!     App $APP does not exist" >&2
+  exit 1
+fi
+
+if ! router_provider_exists "$TARGET"; then
+  echo "!     Unknown proxy '$TARGET'. Run 'dokku router:list' to see the options." >&2
+  exit 1
+fi
+
+CURRENT="$(router_app_proxy "$APP")"
+
+if [[ "$CURRENT" == "$TARGET" ]]; then
+  echo "$APP is already routed through $TARGET; nothing to plan."
+  exit 0
+fi
+
+DETECTED="$(router_app_capabilities "$APP" "$CURRENT")"
+router_load_levels
+
+details_for() {
+  awk -F'\t' -v c="$1" '$1==c {printf "%s%s (%s)", sep, $2, $3; sep="; "}' <<<"$DETECTED"
+}
+
+used_caps() {
+  local key
+  while IFS='|' read -r key _ _ _; do
+    grep -q "^${key}$(printf '\t')" <<<"$DETECTED" && echo "$key"
+  done <<<"$(router_capability_registry)"
+}
+
+# Bucket every used capability by classification.
+declare -a PORTABLE=() TRANSLATABLE=() MANUAL=() UNSUPPORTED=()
+while read -r key; do
+  [[ -z "$key" ]] && continue
+  case "$(router_classify "$key" "$TARGET")" in
+    portable) PORTABLE+=("$key") ;;
+    translatable) TRANSLATABLE+=("$key") ;;
+    manual) MANUAL+=("$key") ;;
+    unsupported) UNSUPPORTED+=("$key") ;;
+  esac
+done <<<"$(used_caps)"
+
+print_bucket() {
+  local class="$1"
+  shift
+  local keys=("$@")
+  [[ ${#keys[@]} -eq 0 ]] && return 0
+
+  printf '%s %s (%d)\n' "$(router_class_symbol "$class")" "$(router_class_label "$class")" "${#keys[@]}"
+  local key note
+  for key in "${keys[@]}"; do
+    printf '   %-31s %s\n' "$(router_capability_label "$key")" "$(details_for "$key")"
+    note="$(router_provider_note "$TARGET" "$key")"
+    [[ -n "$note" ]] && printf '   %-31s -> %s: %s\n' "" "$TARGET" "$note"
+  done
+  echo
+}
+
+echo "=====> Migration plan: $APP  $CURRENT -> $TARGET"
+echo
+
+print_bucket portable "${PORTABLE[@]:+${PORTABLE[@]}}"
+print_bucket translatable "${TRANSLATABLE[@]:+${TRANSLATABLE[@]}}"
+print_bucket manual "${MANUAL[@]:+${MANUAL[@]}}"
+print_bucket unsupported "${UNSUPPORTED[@]:+${UNSUPPORTED[@]}}"
+
+echo "Verdict"
+echo "-------"
+if [[ ${#UNSUPPORTED[@]} -gt 0 ]]; then
+  noun="capabilities"
+  [[ ${#UNSUPPORTED[@]} -eq 1 ]] && noun="capability"
+  echo "  Blocked. $TARGET has no equivalent for ${#UNSUPPORTED[@]} $noun this app relies on."
+  echo "  Migrating without replacing them changes how $APP behaves in production."
+elif [[ ${#MANUAL[@]} -gt 0 ]]; then
+  echo "  Possible, with ${#MANUAL[@]} item(s) that need a human decision first."
+else
+  echo "  Clean. Everything this app uses is either carried by Dokku or has a direct $TARGET equivalent."
+fi
+echo
+
+echo "Steps"
+echo "-----"
+STEP=1
+step() {
+  printf '  %d. %s\n' "$STEP" "$1"
+  STEP=$((STEP + 1))
+}
+detail() {
+  printf '       %s\n' "$1"
+}
+
+if ! router_provider_installed "$TARGET"; then
+  step "Install the $TARGET proxy plugin."
+  detail "dokku plugin:install <$TARGET plugin repo>"
+fi
+
+if [[ ${#UNSUPPORTED[@]} -gt 0 ]]; then
+  step "Resolve the blockers above before going further."
+  for key in "${UNSUPPORTED[@]}"; do
+    detail "$(router_capability_label "$key") -- drop it, move it into the app, or stay on $CURRENT"
+  done
+fi
+
+if [[ ${#MANUAL[@]} -gt 0 ]]; then
+  step "Review each item marked manual and decide its $TARGET equivalent."
+  for key in "${MANUAL[@]}"; do
+    detail "$(router_capability_label "$key"): $(details_for "$key")"
+  done
+fi
+
+if [[ ${#TRANSLATABLE[@]} -gt 0 ]]; then
+  step "Re-express these settings for $TARGET."
+  for key in "${TRANSLATABLE[@]}"; do
+    detail "$(router_capability_label "$key"): $(details_for "$key")"
+  done
+fi
+
+step "Take a backup of the current routing state so you can roll back."
+detail "dokku router:report $APP --format json > $APP-routing-before.json"
+
+step "Switch the proxy."
+detail "dokku proxy:set $APP type $TARGET"
+detail "dokku proxy:build-config $APP"
+
+step "Restart the app and confirm traffic is being served."
+detail "dokku ps:restart $APP"
+detail "dokku router:report $APP"
+
+echo
+echo "  router:plan does not change anything. Run the commands above yourself."

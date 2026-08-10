@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Caddy proxy adapter (capability declarations only -- no live inspection yet).
+
+# shellcheck disable=SC2034  # metadata read by the router plugin after sourcing
+PROXY_NAME="caddy"
+PROXY_DESCRIPTION="Automatic HTTPS by default, configured through a Caddyfile"
+PROXY_DOKKU_PLUGIN="caddy-vhosts"
+PROXY_INSPECTION="metadata"
+
+proxy_capabilities() {
+  cat <<'EOF'
+domains	full
+wildcard-domains	full
+path-routing	full
+port-mapping	full
+non-http-ports	full
+weighted-routing	partial	weighted upstream selection policies
+sticky-sessions	none
+load-balancing	full
+tls	full
+tls-acme	full	automatic HTTPS is the default
+tls-custom-cert	full
+hsts	partial	set as a plain response header
+https-redirect	full	automatic
+http2	full
+http3	full
+websockets	full
+grpc	full
+proxy-timeouts	partial	transport-level timeouts
+body-size-limit	partial	request_body max_size directive
+buffering	partial
+compression	full	encode directive
+request-headers	full
+response-headers	full
+forwarded-headers	full
+forward-auth	partial	forward_auth directive, no Dokku-level plumbing
+basic-auth	full
+rate-limiting	none	requires a third-party module
+ip-allowlist	full	remote_ip matcher
+cors	partial	assembled from header directives
+middleware	full	directive ordering acts as a middleware chain
+deploy-checks	full
+health-checks	full	active and passive upstream health checks
+access-logs	full
+raw-config	full	Caddyfile
+vendor-settings	full
+EOF
+}

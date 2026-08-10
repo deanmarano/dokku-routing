@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$PLUGIN_BASE_PATH/config"
+
+[[ " router " == *" $1 "* ]] || [[ "$1" == "router:"* ]] || exit "$DOKKU_NOT_IMPLEMENTED_EXIT"
+
+show_help() {
+  cat <<EOF
+usage: dokku router[:COMMAND]
+
+Audit and plan migrations between Dokku proxy implementations.
+
+dokku router commands:
+
+    router                                     portability summary for every app
+    router:report <app>                        detailed proxy analysis for one app
+    router:plan <app> <target-proxy>           migration plan for moving an app
+    router:list                                installed and available proxies
+    router:compare <proxy> <proxy>             capability matrix for two proxies
+    router:help                                show this message
+
+Classification used by router:report and router:plan:
+
+    ✅  Portable                    Dokku owns it; it survives the swap as-is
+    🔄  Auto-translatable           real setting, re-expressed for the target
+    ⚠   Manual migration required   partial support, or config we cannot read
+    ❌  Unsupported                 the target proxy has no equivalent
+
+Most commands accept --format json. router:plan is text only.
+EOF
+}
+
+case "$1" in
+  router:help)
+    show_help
+    ;;
+  router | router:*)
+    if [[ "$1" == "router" ]]; then
+      subcommand="summary"
+    else
+      subcommand="${1#router:}"
+    fi
+    shift
+
+    normalized_subcommand="${subcommand//:/_}"
+    normalized_subcommand="${normalized_subcommand//-/_}"
+    subcommand_file="$PLUGIN_BASE_PATH/subcommands/$normalized_subcommand"
+
+    if [[ -x "$subcommand_file" ]]; then
+      exec "$subcommand_file" "$@"
+    else
+      echo "Unknown command: router:$subcommand" >&2
+      echo "Run 'dokku router:help' for usage" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    exit "$DOKKU_NOT_IMPLEMENTED_EXIT"
+    ;;
+esac

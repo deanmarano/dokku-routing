@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_ROOT/config"
+source "$PLUGIN_ROOT/functions"
+
+[[ "${1:-}" == router:* ]] && shift
+router_parse_format "$@"
+
+router_load_levels
+
+APPS="$(router_list_apps)"
+
+# For one app: current proxy, capability count, whether custom config is
+# involved, and which targets it could move to without losing anything.
+analyze() {
+  local app="$1"
+  local proxy detected caps target class
+  local clean=() blocked=()
+
+  proxy="$(router_app_proxy "$app")"
+  detected="$(router_app_capabilities "$app" "$proxy")"
+  caps="$(cut -f1 <<<"$detected" | grep -v '^$' | sort -u || true)"
+
+  local custom="no"
+  grep -q '^raw-config' <<<"$detected" && custom="yes"
+
+  local target_list
+  target_list="$(router_list_providers | grep -vx "$proxy" || true)"
+
+  while read -r target; do
+    [[ -z "$target" ]] && continue
+    local worst="portable"
+    while read -r key; do
+      [[ -z "$key" ]] && continue
+      class="$(router_classify "$key" "$target")"
+      case "$class" in
+        unsupported) worst="unsupported" ;;
+        manual) [[ "$worst" != "unsupported" ]] && worst="manual" ;;
+      esac
+    done <<<"$caps"
+    if [[ "$worst" == "unsupported" ]]; then
+      blocked+=("$target")
+    else
+      clean+=("$target")
+    fi
+  done <<<"$target_list"
+
+  # app <TAB> proxy <TAB> capcount <TAB> custom <TAB> clean <TAB> blocked
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$app" "$proxy" "$(grep -c . <<<"$caps" || echo 0)" "$custom" \
+    "$(IFS=,; echo "${clean[*]:-}")" "$(IFS=,; echo "${blocked[*]:-}")"
+}
+
+ROWS=""
+while read -r app; do
+  [[ -z "$app" ]] && continue
+  ROWS+="$(analyze "$app")"$'\n'
+done <<<"$APPS"
+
+emit_text() {
+  if [[ -z "${APPS//[[:space:]]/}" ]]; then
+    echo "No apps found."
+    return
+  fi
+
+  printf '%-24s %-11s %5s %-8s %s\n' "APP" "PROXY" "CAPS" "CUSTOM" "CAN MOVE TO"
+  printf '%-24s %-11s %5s %-8s %s\n' "---" "-----" "----" "------" "-----------"
+
+  local app proxy count custom clean blocked
+  while IFS=$'\t' read -r app proxy count custom clean blocked; do
+    [[ -z "$app" ]] && continue
+    printf '%-24s %-11s %5s %-8s %s\n' "$app" "$proxy" "$count" "$custom" "${clean:-none}" | sed 's/,/, /g'
+  done <<<"$ROWS"
+
+  echo
+  local any_blocked=0
+  while IFS=$'\t' read -r app proxy count custom clean blocked; do
+    [[ -z "$app" || -z "$blocked" ]] && continue
+    [[ $any_blocked -eq 0 ]] && { echo "Blocked moves"; echo "-------------"; any_blocked=1; }
+    printf '  %-24s ❌ %s\n' "$app" "${blocked//,/, }"
+  done <<<"$ROWS"
+  [[ $any_blocked -eq 1 ]] && echo
+
+  echo "Run 'dokku router:report <app>' for detail, or 'dokku router:plan <app> <proxy>' for a migration plan."
+}
+
+emit_json() {
+  local app proxy count custom clean blocked first=1
+  printf '{"apps":['
+  while IFS=$'\t' read -r app proxy count custom clean blocked; do
+    [[ -z "$app" ]] && continue
+    [[ $first -eq 0 ]] && printf ','
+    first=0
+    printf '{"app":%s,"proxy":%s,"capability_count":%s,"custom_config":%s,"can_move_to":[%s],"blocked_for":[%s]}' \
+      "$(router_json_string "$app")" "$(router_json_string "$proxy")" "${count:-0}" \
+      "$([[ "$custom" == "yes" ]] && echo true || echo false)" \
+      "$(tr ',' '\n' <<<"$clean" | grep -v '^$' | sed 's/.*/"&"/' | paste -sd, -)" \
+      "$(tr ',' '\n' <<<"$blocked" | grep -v '^$' | sed 's/.*/"&"/' | paste -sd, -)"
+  done <<<"$ROWS"
+  printf ']}\n'
+}
+
+if [[ "$ROUTER_FORMAT" == "json" ]]; then
+  emit_json
+else
+  emit_text
+fi

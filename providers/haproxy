@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# HAProxy adapter (capability declarations only -- no live inspection yet).
+
+# shellcheck disable=SC2034  # metadata read by the router plugin after sourcing
+PROXY_NAME="haproxy"
+PROXY_DESCRIPTION="High-performance L4/L7 load balancer with a static configuration"
+PROXY_DOKKU_PLUGIN="haproxy-vhosts"
+PROXY_INSPECTION="metadata"
+
+proxy_capabilities() {
+  cat <<'EOF'
+domains	full
+wildcard-domains	full
+path-routing	full	path ACLs
+port-mapping	full
+non-http-ports	full	native TCP mode
+weighted-routing	full	per-server weights
+sticky-sessions	full	cookie and stick tables
+load-balancing	full
+tls	full
+tls-acme	none	certificates must be provisioned externally
+tls-custom-cert	full
+hsts	partial	added via http-response set-header
+https-redirect	full
+http2	full
+http3	partial	requires a recent build with QUIC enabled
+websockets	full
+grpc	full
+proxy-timeouts	full	timeout client/server/connect
+body-size-limit	partial	enforced by tune.h1.max-* and ACLs
+buffering	partial
+compression	full
+request-headers	full
+response-headers	full
+forwarded-headers	full
+forward-auth	none	no equivalent to a forward-auth subrequest
+basic-auth	full	userlists
+rate-limiting	full	stick tables
+ip-allowlist	full	src ACLs
+cors	none	must be hand-assembled from header rules
+middleware	none	no composable middleware model
+deploy-checks	full
+health-checks	full
+access-logs	full
+raw-config	full	haproxy.cfg
+vendor-settings	full
+EOF
+}
