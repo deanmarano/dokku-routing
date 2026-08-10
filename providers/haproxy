@@ -19,7 +19,7 @@ sticky-sessions	full	cookie and stick tables
 load-balancing	full
 tls	full
 tls-acme	full	EasyHAProxy issues via certbot: haproxy:set --global letsencrypt-email
-tls-custom-cert	full
+tls-custom-cert	none	Dokku never exposes its cert store to the proxy container
 hsts	partial	added via http-response set-header
 https-redirect	full
 http2	full

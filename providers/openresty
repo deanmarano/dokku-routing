@@ -19,7 +19,7 @@ sticky-sessions	none
 load-balancing	full
 tls	full
 tls-acme	full	built in: openresty:set --global letsencrypt-email
-tls-custom-cert	full
+tls-custom-cert	none	Dokku never exposes its cert store to the proxy container
 hsts	full
 https-redirect	full
 http2	full

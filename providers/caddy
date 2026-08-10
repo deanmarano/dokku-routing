@@ -19,7 +19,7 @@ sticky-sessions	none
 load-balancing	full
 tls	full
 tls-acme	full	automatic HTTPS: caddy:set --global letsencrypt-email
-tls-custom-cert	full
+tls-custom-cert	none	Dokku never exposes its cert store to the proxy container
 hsts	partial	set as a plain response header
 https-redirect	full	automatic
 http2	full

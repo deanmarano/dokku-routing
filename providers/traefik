@@ -19,7 +19,7 @@ sticky-sessions	full	cookie-based stickiness
 load-balancing	full
 tls	full
 tls-acme	full	built in: traefik:set --global letsencrypt-email
-tls-custom-cert	partial	certificates must be published to Traefik's store
+tls-custom-cert	none	Dokku never exposes its cert store to the Traefik container
 hsts	full	headers middleware
 https-redirect	full	redirectScheme middleware
 http2	full

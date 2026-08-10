@@ -88,6 +88,25 @@ describe('routing:report', () => {
     expect(caddy.classification).toBe('manual');
   });
 
+  it('does not mistake a letsencrypt-managed cert for an operator-supplied one', async () => {
+    const tls = `/home/dokku/${APP}/tls`;
+    dokku.runHostShell(`mkdir -p ${tls}`);
+    dokku.writeHostFile(`${tls}/server.crt`, 'not a real certificate\n');
+
+    let data = await dokku.json('report', APP);
+    expect(data.capabilities.find((c: any) => c.key === 'tls')).toBeDefined();
+    expect(data.capabilities.find((c: any) => c.key === 'tls-custom-cert')).toBeDefined();
+
+    // dokku-letsencrypt leaves this marker beside a cert it installed, which
+    // makes the certificate its business rather than the operator's.
+    dokku.writeHostFile(`${tls}/server.letsencrypt.crt`, 'marker\n');
+    data = await dokku.json('report', APP);
+    expect(data.capabilities.find((c: any) => c.key === 'tls')).toBeDefined();
+    expect(data.capabilities.find((c: any) => c.key === 'tls-custom-cert')).toBeUndefined();
+
+    dokku.runHostShell(`rm -rf ${tls}`);
+  });
+
   it('renders the classification legend in text mode', async () => {
     const result = await dokku.exec('report', APP);
     expect(result.exitCode).toBe(0);

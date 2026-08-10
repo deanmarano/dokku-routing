@@ -151,6 +151,11 @@ export class DokkuRouting {
     this.runDokku('ports:set', app, ...mappings);
   }
 
+  /** Run a shell command on the Dokku host (mkdir, rm, and friends). */
+  runHostShell(inner: string): void {
+    this.hostShell(inner);
+  }
+
   /** Write a file onto the Dokku host (used to plant an nginx.conf.sigil). */
   writeHostFile(path: string, contents: string): void {
     const encoded = Buffer.from(contents).toString('base64');

@@ -424,7 +424,12 @@ routing_detect_common() {
 
   if [[ -f "$DOKKU_ROOT/$app/tls/server.crt" ]]; then
     printf 'tls\tcertificate installed\tcerts\n'
-    printf 'tls-custom-cert\t%s\tcerts\n' "$DOKKU_ROOT/$app/tls/server.crt"
+    # dokku-letsencrypt copies the cert it installed to server.letsencrypt.crt
+    # so it can recognise its own. Without that marker the certificate was put
+    # there by hand, and only then is it something an operator has to carry.
+    if [[ ! -f "$DOKKU_ROOT/$app/tls/server.letsencrypt.crt" ]]; then
+      printf 'tls-custom-cert\t%s\tcerts\n' "$DOKKU_ROOT/$app/tls/server.crt"
+    fi
   fi
 
   if routing_app_has_acme "$app"; then
