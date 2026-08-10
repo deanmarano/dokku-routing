@@ -113,6 +113,23 @@ describe('third-party capability contributions', () => {
     expect(caddy.classification).not.toBe('unsupported');
   });
 
+  it('reports an app blocked from every target as movable to none of them', async () => {
+    // Regression: the row is tab separated and read back with IFS=$'\t'. Tab is
+    // an IFS whitespace character, so an empty field in the middle collapsed
+    // into its neighbour and the blocked list was read as the clean list --
+    // inverting the verdict precisely for the apps that can move least.
+    const summary = await dokku.json('routing');
+    const app = summary.apps.find((a: any) => a.app === APP);
+
+    for (const target of app.blocked_for) {
+      expect(app.can_move_to).not.toContain(target);
+    }
+    if (app.can_move_to.length === 0) {
+      const text = await dokku.exec('routing');
+      expect(text.stdout).toMatch(new RegExp(`${APP}\\s+\\S+\\s+\\d+\\s+\\S+\\s+none`));
+    }
+  });
+
   it('surfaces declared proxy support in routing:list', async () => {
     const data = await dokku.json('list');
     const rows = data.contributions.filter((c: any) => c.plugin === 'test-fixture');

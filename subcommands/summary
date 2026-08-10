@@ -90,9 +90,25 @@ analyze() {
   done <<<"$target_list"
 
   # app <TAB> proxy <TAB> capcount <TAB> custom <TAB> clean <TAB> blocked
+  #
+  # Empty lists are written as "-", never as an empty field. Tab is an IFS
+  # whitespace character, so `read` with IFS=$'\t' collapses a run of tabs into
+  # one delimiter: an empty field in the middle silently shifts every later
+  # value one column left. An app blocked from every target has no clean list,
+  # and would otherwise be read back as movable to all of them.
+  local clean_list blocked_list
+  clean_list="$(IFS=,; echo "${clean[*]:-}")"
+  blocked_list="$(IFS=,; echo "${blocked[*]:-}")"
+
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$app" "$proxy" "$(grep -c . <<<"$caps" || echo 0)" "$custom" \
-    "$(IFS=,; echo "${clean[*]:-}")" "$(IFS=,; echo "${blocked[*]:-}")"
+    "${clean_list:--}" "${blocked_list:--}"
+}
+
+# Turn the "-" placeholder back into an empty list.
+unplaceholder() {
+  [[ "$1" == "-" ]] && return 0
+  printf '%s' "$1"
 }
 
 ROWS=""
@@ -113,12 +129,14 @@ emit_text() {
   local app proxy count custom clean blocked
   while IFS=$'\t' read -r app proxy count custom clean blocked; do
     [[ -z "$app" ]] && continue
+    clean="$(unplaceholder "$clean")"
     printf '%-24s %-11s %5s %-8s %s\n' "$app" "$proxy" "$count" "$custom" "${clean:-none}" | sed 's/,/, /g'
   done <<<"$ROWS"
 
   echo
   local any_blocked=0
   while IFS=$'\t' read -r app proxy count custom clean blocked; do
+    blocked="$(unplaceholder "$blocked")"
     [[ -z "$app" || -z "$blocked" ]] && continue
     [[ $any_blocked -eq 0 ]] && { echo "Blocked moves"; echo "-------------"; any_blocked=1; }
     printf '  %-24s ❌ %s\n' "$app" "${blocked//,/, }"
@@ -133,6 +151,8 @@ emit_json() {
   printf '{"apps":['
   while IFS=$'\t' read -r app proxy count custom clean blocked; do
     [[ -z "$app" ]] && continue
+    clean="$(unplaceholder "$clean")"
+    blocked="$(unplaceholder "$blocked")"
     [[ $first -eq 0 ]] && printf ','
     first=0
     printf '{"app":%s,"proxy":%s,"capability_count":%s,"custom_config":%s,"can_move_to":[%s],"blocked_for":[%s]}' \
