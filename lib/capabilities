@@ -58,18 +58,30 @@ vendor-settings|Proxy-specific settings|config|opaque
 EOF
 }
 
+# Index the registry once. Classification asks for a capability's ownership
+# thousands of times in a full summary; doing that with a grep per lookup costs
+# more than every dokku call combined.
+declare -gA ROUTING_CAP_FIELD=()
+ROUTING_CAPS_LOADED=""
+
+routing_load_capabilities() {
+  [[ -n "$ROUTING_CAPS_LOADED" ]] && return 0
+  local key label category ownership
+  while IFS='|' read -r key label category ownership; do
+    [[ -z "$key" ]] && continue
+    ROUTING_CAP_FIELD["$key|label"]="$label"
+    ROUTING_CAP_FIELD["$key|category"]="$category"
+    ROUTING_CAP_FIELD["$key|ownership"]="$ownership"
+  done <<<"$(routing_capability_registry)"
+  ROUTING_CAPS_LOADED="yes"
+}
+
 # Look up one field of a capability. Returns non-zero for unknown keys.
 routing_capability_field() {
-  local key="$1" field="$2" line
-  line="$(routing_capability_registry | grep "^${key}|" || true)"
-  [[ -z "$line" ]] && return 1
-  IFS='|' read -r _ label category ownership <<<"$line"
-  case "$field" in
-    label) echo "$label" ;;
-    category) echo "$category" ;;
-    ownership) echo "$ownership" ;;
-    *) return 1 ;;
-  esac
+  routing_load_capabilities
+  local value="${ROUTING_CAP_FIELD["$1|$2"]:-}"
+  [[ -z "$value" ]] && return 1
+  printf '%s\n' "$value"
 }
 
 routing_capability_label() {
@@ -77,5 +89,6 @@ routing_capability_label() {
 }
 
 routing_capability_exists() {
-  routing_capability_registry | grep -q "^${1}|"
+  routing_load_capabilities
+  [[ -n "${ROUTING_CAP_FIELD["$1|label"]:-}" ]]
 }

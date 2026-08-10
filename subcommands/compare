@@ -63,7 +63,11 @@ emit_text() {
       printf '\n'
     fi
   done <<<"$(routing_capability_registry)"
-  [[ $found -eq 0 ]] && echo "  (none -- $RIGHT covers everything $LEFT does)"
+  # Not `[[ ... ]] && echo`: that would make "differences were found" the
+  # function's exit status, and so the command's.
+  if [[ $found -eq 0 ]]; then
+    echo "  (none -- $RIGHT covers everything $LEFT does)"
+  fi
 }
 
 emit_json() {

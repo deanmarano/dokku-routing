@@ -205,6 +205,7 @@ declare -gA ROUTING_NOTE=()
 ROUTING_LEVELS_LOADED=""
 
 routing_load_levels() {
+  routing_load_capabilities
   [[ -n "$ROUTING_LEVELS_LOADED" ]] && return 0
   local provider cap level note
   for provider in $(routing_list_providers); do

@@ -65,6 +65,18 @@ describe('routing:compare', () => {
     expect(data.capabilities.length).toBeGreaterThan(20);
   });
 
+  it('exits zero in text mode when differences are found', async () => {
+    const result = await dokku.exec('compare', 'nginx', 'traefik');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Differences that matter');
+  });
+
+  it('exits zero in text mode when there are no differences', async () => {
+    const result = await dokku.exec('compare', 'nginx', 'nginx');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('covers everything');
+  });
+
   it('rejects an unknown proxy', async () => {
     const result = await dokku.exec('compare', 'nginx', 'nosuchproxy');
     expect(result.exitCode).not.toBe(0);
