@@ -13,6 +13,18 @@ routing_load_levels
 
 routing_list_apps >/dev/null
 APPS="$(routing_list_apps)"
+APP_COUNT="$(grep -c . <<<"$APPS" || true)"
+
+# Inspecting a whole fleet takes long enough to look like a hang, so say what is
+# happening before the wait rather than after it. On stderr: stdout is the
+# report, and must stay parseable under --format json.
+if [[ "$APP_COUNT" -gt 0 ]]; then
+  if [[ "$APP_COUNT" -ge 10 ]]; then
+    echo "-----> Inspecting $APP_COUNT apps, this takes a few seconds" >&2
+  else
+    echo "-----> Inspecting $APP_COUNT apps" >&2
+  fi
+fi
 
 # Summarising every app is the one place where per-app `dokku *:report` calls
 # dominate the runtime. Fetch each report for all apps up front instead, and

@@ -66,6 +66,19 @@ describe('routing (summary)', () => {
     expect(result.stdout).toContain('Blocked moves');
   });
 
+  it('says what it is doing before the wait', async () => {
+    const result = await dokku.exec('routing');
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain('Inspecting');
+  });
+
+  it('keeps the progress notice out of stdout, so json stays parseable', async () => {
+    const result = await dokku.exec('routing', '--format', 'json');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain('Inspecting');
+    expect(() => JSON.parse(result.stdout)).not.toThrow();
+  });
+
   it('rejects an unknown --format', async () => {
     const result = await dokku.exec('routing', '--format', 'yaml');
     expect(result.exitCode).not.toBe(0);
