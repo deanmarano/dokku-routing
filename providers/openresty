@@ -18,7 +18,7 @@ weighted-routing	none
 sticky-sessions	none
 load-balancing	full
 tls	full
-tls-acme	full	lua-resty-acme, built into the proxy
+tls-acme	full	built in: openresty:set --global letsencrypt-email
 tls-custom-cert	full
 hsts	full
 https-redirect	full

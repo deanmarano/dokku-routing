@@ -18,7 +18,7 @@ weighted-routing	full	per-server weights
 sticky-sessions	full	cookie and stick tables
 load-balancing	full
 tls	full
-tls-acme	none	certificates must be provisioned externally
+tls-acme	full	EasyHAProxy issues via certbot: haproxy:set --global letsencrypt-email
 tls-custom-cert	full
 hsts	partial	added via http-response set-header
 https-redirect	full

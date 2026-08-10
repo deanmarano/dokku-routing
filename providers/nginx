@@ -18,7 +18,7 @@ weighted-routing	none	upstream weights are not exposed by Dokku
 sticky-sessions	none	needs a third-party module or hand-written config
 load-balancing	full	all app containers become upstream members
 tls	full
-tls-acme	partial	needs the separate dokku-letsencrypt plugin
+tls-acme	partial	no built-in ACME; needs dokku-letsencrypt, which only works with nginx
 tls-custom-cert	full
 hsts	full	nginx:set hsts
 https-redirect	full	automatic once a certificate is present

@@ -18,7 +18,7 @@ weighted-routing	full	weighted round-robin services
 sticky-sessions	full	cookie-based stickiness
 load-balancing	full
 tls	full
-tls-acme	full	ACME is built into the proxy
+tls-acme	full	built in: traefik:set --global letsencrypt-email
 tls-custom-cert	partial	certificates must be published to Traefik's store
 hsts	full	headers middleware
 https-redirect	full	redirectScheme middleware

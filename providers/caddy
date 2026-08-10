@@ -18,7 +18,7 @@ weighted-routing	partial	weighted upstream selection policies
 sticky-sessions	none
 load-balancing	full
 tls	full
-tls-acme	full	automatic HTTPS is the default
+tls-acme	full	automatic HTTPS: caddy:set --global letsencrypt-email
 tls-custom-cert	full
 hsts	partial	set as a plain response header
 https-redirect	full	automatic
