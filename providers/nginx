@@ -97,15 +97,20 @@ proxy_detect() {
   # plugins generate files here too. Generated config is not opaque -- something
   # already knows what it means -- so attribute it rather than calling it
   # hand-written and blocking the migration over it.
-  local extra owned
-  owned="$(routing_owned_config_paths "$app")"
+  local extra owned="" asked=""
   for extra in "$DOKKU_ROOT/$app/nginx.conf.d"/*.conf; do
     [[ -f "$extra" ]] || continue
 
     # nginx-vhosts writes this from the hsts properties, which are reported
     # as their own capability above.
-    [[ "$(basename "$extra")" == "hsts.conf" ]] && continue
+    [[ "${extra##*/}" == "hsts.conf" ]] && continue
 
+    # Asking costs a plugn trigger, so only ask once, and only for apps that
+    # actually have a file whose ownership is in question.
+    if [[ -z "$asked" ]]; then
+      owned="$(routing_owned_config_paths "$app")"
+      asked="yes"
+    fi
     grep -qxF "$extra" <<<"$owned" && continue
 
     printf 'raw-config\t%s\tnginx.conf.d\n' "$extra"

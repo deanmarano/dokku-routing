@@ -148,6 +148,7 @@ routing_prewarm_app() {
 
   routing_app_has_acme "$app" &>/dev/null || true
   routing_trigger_exists || true
+  routing_load_plugin_support
 }
 
 # Apps with a dokku-letsencrypt certificate.
@@ -523,6 +524,10 @@ routing_detect_vendor_settings() {
 routing_classify() {
   local cap="$1" target="$2" sources="${3:-}" level ownership
   routing_load_levels
+  # Load here, in the caller's shell. routing_integration_limit runs inside a
+  # command substitution, so a cache filled there is thrown away and every
+  # single classification would re-run the plugn trigger.
+  [[ -n "$sources" ]] && routing_load_plugin_support
   level="${ROUTING_LEVEL["$target|$cap"]:-none}"
   ownership="${ROUTING_CAP_FIELD["$cap|ownership"]:-proxy}"
 

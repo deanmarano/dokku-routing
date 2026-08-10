@@ -36,6 +36,7 @@ routing_prewarm_field ports ports-map
 routing_prewarm_reports checks
 routing_acme_apps >/dev/null
 routing_trigger_exists || true
+routing_load_plugin_support
 
 # Now that proxy:report is cached, we know which proxies are actually in use
 # and can fetch only those adapters' reports rather than every proxy Dokku
