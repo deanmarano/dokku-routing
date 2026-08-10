@@ -127,6 +127,9 @@ routing_field() {
 # analysis of one app costs one call per report rather than one per lookup.
 routing_prewarm_app() {
   local app="$1" proxy
+  # Fill the cache here first; asking through routing_app_proxy would do it
+  # inside a command substitution, where the write is discarded.
+  routing_field proxy proxy-computed-type "Proxy computed type" "$app" >/dev/null
   proxy="$(routing_app_proxy "$app")"
 
   routing_field domains domains-app-vhosts "Domains app vhosts" "$app" >/dev/null
@@ -138,11 +141,14 @@ routing_prewarm_app() {
     [[ "$proxy" == "traefik" ]] && routing_report docker-options "$app" >/dev/null
   fi
 
-  routing_acme_apps >/dev/null
+  routing_app_has_acme "$app" &>/dev/null || true
   routing_trigger_exists || true
 }
 
-# Apps with a dokku-letsencrypt certificate. Read once; the list is global.
+# Apps with a dokku-letsencrypt certificate.
+#
+# The whole list costs 2.2s, so only the summary -- which needs every app --
+# pays for it. A single app asks letsencrypt:active instead, at 0.14s.
 ROUTING_ACME_LOADED=""
 ROUTING_ACME_APPS=""
 routing_acme_apps() {
@@ -151,6 +157,18 @@ routing_acme_apps() {
     ROUTING_ACME_LOADED="yes"
   }
   printf '%s' "$ROUTING_ACME_APPS"
+}
+
+declare -gA ROUTING_ACME_APP=()
+routing_app_has_acme() {
+  local app="$1"
+  if [[ -n "$ROUTING_ACME_LOADED" ]]; then
+    routing_acme_apps | grep -qx "$app"
+    return
+  fi
+  [[ -n "${ROUTING_ACME_APP[$app]+set}" ]] || \
+    ROUTING_ACME_APP["$app"]="$(routing_dokku letsencrypt:active "$app")"
+  [[ "${ROUTING_ACME_APP[$app]}" == "true" ]]
 }
 
 # Does any installed plugin implement our trigger? Asking plugn per app when
@@ -194,9 +212,8 @@ routing_app_proxy() {
 }
 
 routing_app_proxy_enabled() {
-  local app="$1" report enabled
-  report="$(routing_report proxy "$app")"
-  enabled="$(routing_report_field "$report" "Proxy enabled" || true)"
+  local app="$1" enabled
+  enabled="$(routing_field proxy proxy-enabled "Proxy enabled" "$app")"
   [[ "$enabled" == "false" ]] && return 1
   return 0
 }
@@ -405,7 +422,7 @@ routing_detect_common() {
     printf 'tls-custom-cert\t%s\tcerts\n' "$DOKKU_ROOT/$app/tls/server.crt"
   fi
 
-  if routing_acme_apps | grep -qx "$app"; then
+  if routing_app_has_acme "$app"; then
     printf 'tls-acme\tmanaged by dokku-letsencrypt\tletsencrypt\n'
   fi
 
