@@ -68,6 +68,16 @@ running || die "Container exited while installing the plugin"
 docker exec "$CONTAINER" dokku routing:help >/dev/null
 docker exec "$CONTAINER" dokku routing:list
 
+# Whether this Dokku exposes single-field reports decides if the summary takes
+# the fast path or falls back to full reports. Both are correct; knowing which
+# ran makes a slow or surprising CI run explainable.
+echo "-----> Single-field report support"
+if docker exec "$CONTAINER" dokku ports:report --ports-map >/dev/null 2>&1; then
+  echo "       ports:report --ports-map: supported"
+else
+  echo "       ports:report --ports-map: NOT supported, falling back to full reports"
+fi
+
 # An app the tests do not own, so the summary always has something to report
 # and app-scoped assertions have a neighbour to be distinguished from.
 docker exec "$CONTAINER" dokku apps:create ci-bystander >/dev/null 2>&1 || true

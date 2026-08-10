@@ -88,22 +88,27 @@ routing_report() {
 
 declare -gA ROUTING_FIELD=()
 
+# Best effort, and never fatal: callers run under `set -e`, so a failure here
+# must leave them running rather than abort the command. Giving up simply means
+# routing_field falls back to asking per app.
 routing_prewarm_field() {
   local plugin="$1" flag="$2" out apps i
   local -a app_list value_list
 
   apps="$(routing_list_apps)"
-  [[ -z "${apps//[[:space:]]/}" ]] && return 0
+  [[ -n "${apps//[[:space:]]/}" ]] || return 0
 
-  out="$("$DOKKU_BIN" "$plugin:report" "--$flag" 2>/dev/null)" || return 1
+  out="$("$DOKKU_BIN" "$plugin:report" "--$flag" 2>/dev/null)" || return 0
+  [[ -n "$out" ]] || return 0
 
   mapfile -t app_list <<<"$apps"
   mapfile -t value_list <<<"$out"
-  [[ ${#app_list[@]} -eq ${#value_list[@]} ]] || return 1
+  [[ ${#app_list[@]} -eq ${#value_list[@]} ]] || return 0
 
   for i in "${!app_list[@]}"; do
     ROUTING_FIELD["$plugin|$flag|${app_list[i]}"]="${value_list[i]}"
   done
+  return 0
 }
 
 # One property of one app, by whichever route is available.
