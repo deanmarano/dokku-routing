@@ -143,12 +143,23 @@ special cases. See [contrib/README.md](contrib/README.md).
 ## Development
 
 ```
-make deps     install test dependencies
-make lint     shellcheck
-make test     integration tests (requires a Dokku host)
-make install  install into the local Dokku
+make deps         install test dependencies
+make lint         shellcheck
+make test-docker  boot a throwaway Dokku in Docker and test against it
+make test         test against whatever Dokku the environment points at
+make install      install into the local Dokku
 ```
 
-Tests are TypeScript under vitest and run against a real Dokku host. Point them
-at a remote one with `DOKKU_HOST=my-host npm test`, or use `DOKKU_USE_SUDO=true`
-locally.
+Tests are TypeScript under vitest and need a real Dokku. They create and destroy
+apps named `router-*` and write files under `/home/dokku/router-*/`, so point
+them at something disposable:
+
+| | |
+|---|---|
+| `make test-docker` | boots `dokku/dokku` in Docker and drives it with `docker exec` (what CI runs) |
+| `DOKKU_CONTAINER=name npm test` | an existing Dokku container |
+| `DOKKU_HOST=my-host npm test` | a remote Dokku over SSH |
+| `DOKKU_USE_SUDO=true npm test` | the local `dokku` binary |
+
+`make test-docker` mounts the host Docker socket into the Dokku container. Run it
+on a disposable machine, not one hosting anything you care about.

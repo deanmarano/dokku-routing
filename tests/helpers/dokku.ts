@@ -4,6 +4,10 @@ const DOKKU_HOST = process.env.DOKKU_HOST || 'local';
 const DOKKU_SSH_PORT = process.env.DOKKU_SSH_PORT || '22';
 const USE_SUDO = process.env.DOKKU_USE_SUDO === 'true';
 
+// CI runs Dokku in a container; set DOKKU_CONTAINER to drive it with
+// `docker exec` instead of a local binary or SSH.
+const DOKKU_CONTAINER = process.env.DOKKU_CONTAINER || '';
+
 export interface ExecResult {
   exitCode: number;
   stdout: string;
@@ -19,10 +23,28 @@ export class DokkuRouter {
 
   private buildCommand(args: string[]): string {
     const argsStr = args.join(' ');
+    if (DOKKU_CONTAINER) {
+      return `docker exec ${DOKKU_CONTAINER} dokku ${argsStr}`;
+    }
     if (this.isRemote()) {
       return `ssh -o StrictHostKeyChecking=no -p ${DOKKU_SSH_PORT} dokku@${DOKKU_HOST} ${argsStr}`;
     }
     return USE_SUDO ? `sudo dokku ${argsStr}` : `dokku ${argsStr}`;
+  }
+
+  /** Run an arbitrary shell command on whichever host Dokku lives on. */
+  private hostShell(inner: string): void {
+    if (DOKKU_CONTAINER) {
+      spawnSync('docker', ['exec', DOKKU_CONTAINER, 'sh', '-c', inner], { stdio: 'inherit' });
+      return;
+    }
+    if (this.isRemote()) {
+      execSync(
+        `ssh -o StrictHostKeyChecking=no -p ${DOKKU_SSH_PORT} dokku@${DOKKU_HOST} "${inner}"`
+      );
+      return;
+    }
+    execSync(USE_SUDO ? `sudo sh -c '${inner}'` : `sh -c '${inner}'`);
   }
 
   /**
@@ -130,26 +152,12 @@ export class DokkuRouter {
   /** Write a file onto the Dokku host (used to plant an nginx.conf.sigil). */
   writeHostFile(path: string, contents: string): void {
     const encoded = Buffer.from(contents).toString('base64');
-    const inner = `echo ${encoded} | base64 -d | tee ${path} > /dev/null`;
-    if (this.isRemote()) {
-      execSync(
-        `ssh -o StrictHostKeyChecking=no -p ${DOKKU_SSH_PORT} dokku@${DOKKU_HOST} "${inner}"`
-      );
-      return;
-    }
-    execSync(USE_SUDO ? `sudo sh -c '${inner}'` : `sh -c '${inner}'`);
+    this.hostShell(`echo ${encoded} | base64 -d > ${path}`);
   }
 
   removeHostFile(path: string): void {
-    const inner = `rm -f ${path}`;
     try {
-      if (this.isRemote()) {
-        execSync(
-          `ssh -o StrictHostKeyChecking=no -p ${DOKKU_SSH_PORT} dokku@${DOKKU_HOST} "${inner}"`
-        );
-      } else {
-        execSync(USE_SUDO ? `sudo ${inner}` : inner);
-      }
+      this.hostShell(`rm -f ${path}`);
     } catch {
       // Nothing to remove.
     }
