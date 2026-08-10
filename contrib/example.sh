@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Example drop-in for /var/lib/dokku/data/router/contrib/.
+# Example drop-in for /var/lib/dokku/data/routing/contrib/.
 #
 # Copy this file, rename it, and replace the bodies. It is sourced in a
 # subshell, so it may not assume anything about the caller's state beyond the
-# helpers in the router plugin's `functions` file.
+# helpers in the routing plugin's `functions` file.
 
 # Capabilities this plugin imposes on one app.
 # Emit: <capability-key><TAB><detail><TAB><source>

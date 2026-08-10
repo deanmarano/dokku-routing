@@ -6,28 +6,28 @@ PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$PLUGIN_ROOT/config"
 source "$PLUGIN_ROOT/functions"
 
-[[ "${1:-}" == router:* ]] && shift
-router_parse_format "$@"
-set -- "${ROUTER_ARGS[@]:-}"
+[[ "${1:-}" == routing:* ]] && shift
+routing_parse_format "$@"
+set -- "${ROUTING_ARGS[@]:-}"
 
 APP="${1:-}"
 
 if [[ -z "$APP" ]]; then
-  echo "Usage: dokku router:report <app> [--format json]" >&2
+  echo "Usage: dokku routing:report <app> [--format json]" >&2
   exit 1
 fi
 
-if ! router_app_exists "$APP"; then
+if ! routing_app_exists "$APP"; then
   echo "!     App $APP does not exist" >&2
   exit 1
 fi
 
-CURRENT="$(router_app_proxy "$APP")"
+CURRENT="$(routing_app_proxy "$APP")"
 ENABLED="true"
-router_app_proxy_enabled "$APP" || ENABLED="false"
+routing_app_proxy_enabled "$APP" || ENABLED="false"
 
-DETECTED="$(router_app_capabilities "$APP" "$CURRENT")"
-router_load_levels
+DETECTED="$(routing_app_capabilities "$APP" "$CURRENT")"
+routing_load_levels
 
 # Every detected detail for one capability, joined for display.
 details_for() {
@@ -39,12 +39,12 @@ used_caps() {
   local key
   while IFS='|' read -r key _ _ _; do
     grep -q "^${key}$(printf '\t')" <<<"$DETECTED" && echo "$key"
-  done <<<"$(router_capability_registry)"
+  done <<<"$(routing_capability_registry)"
 }
 
 targets() {
   local provider
-  for provider in $(router_list_providers); do
+  for provider in $(routing_list_providers); do
     [[ "$provider" == "$CURRENT" ]] && continue
     echo "$provider"
   done
@@ -57,9 +57,9 @@ emit_text() {
   echo
   printf '       Current proxy:      %s\n' "$CURRENT"
   printf '       Proxy enabled:      %s\n' "$ENABLED"
-  if ! router_provider_exists "$CURRENT"; then
+  if ! routing_provider_exists "$CURRENT"; then
     printf '       Note:               no adapter for "%s"; only shared Dokku state was inspected\n' "$CURRENT"
-  elif ! router_provider_inspects "$CURRENT"; then
+  elif ! routing_provider_inspects "$CURRENT"; then
     printf '       Note:               the %s adapter declares capabilities but does not inspect live config yet\n' "$CURRENT"
   fi
   echo
@@ -70,7 +70,7 @@ emit_text() {
   while read -r key; do
     [[ -z "$key" ]] && continue
     any=1
-    label="$(router_capability_label "$key")"
+    label="$(routing_capability_label "$key")"
     printf '  %-31s %s\n' "$label" "$(details_for "$key")"
   done <<<"$(used_caps)"
   [[ $any -eq 0 ]] && echo "  (nothing beyond proxy defaults)"
@@ -88,7 +88,7 @@ emit_text() {
     counts=([portable]=0 [translatable]=0 [manual]=0 [unsupported]=0)
     while read -r key; do
       [[ -z "$key" ]] && continue
-      class="$(router_classify "$key" "$target")"
+      class="$(routing_classify "$key" "$target")"
       counts[$class]=$((counts[$class] + 1))
     done <<<"$(used_caps)"
     printf '  %-14s %8s %6s %7s %12s\n' "$target" \
@@ -96,14 +96,14 @@ emit_text() {
   done <<<"$(targets)"
 
   echo
-  echo "  Run 'dokku router:plan $APP <target>' to see why."
+  echo "  Run 'dokku routing:plan $APP <target>' to see why."
 }
 
 emit_json() {
   local key target first
 
   printf '{"app":%s,"proxy":%s,"proxy_enabled":%s,"capabilities":[' \
-    "$(router_json_string "$APP")" "$(router_json_string "$CURRENT")" "$ENABLED"
+    "$(routing_json_string "$APP")" "$(routing_json_string "$CURRENT")" "$ENABLED"
 
   first=1
   while IFS=$'\t' read -r key detail source; do
@@ -111,9 +111,9 @@ emit_json() {
     [[ $first -eq 0 ]] && printf ','
     first=0
     printf '{"key":%s,"label":%s,"detail":%s,"source":%s}' \
-      "$(router_json_string "$key")" \
-      "$(router_json_string "$(router_capability_label "$key")")" \
-      "$(router_json_string "$detail")" "$(router_json_string "$source")"
+      "$(routing_json_string "$key")" \
+      "$(routing_json_string "$(routing_capability_label "$key")")" \
+      "$(routing_json_string "$detail")" "$(routing_json_string "$source")"
   done <<<"$DETECTED"
 
   printf '],"portability":{'
@@ -122,24 +122,24 @@ emit_json() {
     [[ -z "$target" ]] && continue
     [[ $tfirst -eq 0 ]] && printf ','
     tfirst=0
-    printf '%s:[' "$(router_json_string "$target")"
+    printf '%s:[' "$(routing_json_string "$target")"
     first=1
     while read -r key; do
       [[ -z "$key" ]] && continue
       [[ $first -eq 0 ]] && printf ','
       first=0
       printf '{"key":%s,"classification":%s,"target_support":%s,"note":%s}' \
-        "$(router_json_string "$key")" \
-        "$(router_json_string "$(router_classify "$key" "$target")")" \
-        "$(router_json_string "$(router_provider_level "$target" "$key")")" \
-        "$(router_json_string "$(router_provider_note "$target" "$key")")"
+        "$(routing_json_string "$key")" \
+        "$(routing_json_string "$(routing_classify "$key" "$target")")" \
+        "$(routing_json_string "$(routing_provider_level "$target" "$key")")" \
+        "$(routing_json_string "$(routing_provider_note "$target" "$key")")"
     done <<<"$(used_caps)"
     printf ']'
   done <<<"$(targets)"
   printf '}}\n'
 }
 
-if [[ "$ROUTER_FORMAT" == "json" ]]; then
+if [[ "$ROUTING_FORMAT" == "json" ]]; then
   emit_json
 else
   emit_text

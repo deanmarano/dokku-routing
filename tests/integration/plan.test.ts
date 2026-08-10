@@ -1,21 +1,21 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { DokkuRouter } from '../helpers/dokku';
+import { DokkuRouting } from '../helpers/dokku';
 
-const PLAIN = 'router-plan-plain';
-const CUSTOM = 'router-plan-custom';
+const PLAIN = 'routing-plan-plain';
+const CUSTOM = 'routing-plan-custom';
 const SIGIL = `/home/dokku/${CUSTOM}/nginx.conf.sigil`;
 
-describe('router:plan', () => {
-  let dokku: DokkuRouter;
+describe('routing:plan', () => {
+  let dokku: DokkuRouting;
 
   beforeAll(() => {
-    dokku = new DokkuRouter();
+    dokku = new DokkuRouting();
 
     dokku.createTestApp(PLAIN);
-    dokku.addDomain(PLAIN, 'router-plan-plain.example.com');
+    dokku.addDomain(PLAIN, 'routing-plan-plain.example.com');
 
     dokku.createTestApp(CUSTOM);
-    dokku.addDomain(CUSTOM, 'router-plan-custom.example.com');
+    dokku.addDomain(CUSTOM, 'routing-plan-custom.example.com');
     dokku.writeHostFile(SIGIL, '# custom vhost\n');
   });
 

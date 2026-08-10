@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Traefik proxy adapter.
 
-# shellcheck disable=SC2034  # metadata read by the router plugin after sourcing
+# shellcheck disable=SC2034  # metadata read by the routing plugin after sourcing
 PROXY_NAME="traefik"
 PROXY_DESCRIPTION="Dynamic, container-aware routing driven by labels and middleware"
 PROXY_DOKKU_PLUGIN="traefik-vhosts"
@@ -50,14 +50,14 @@ EOF
 proxy_detect() {
   local app="$1" report labels
 
-  router_detect_common "$app"
+  routing_detect_common "$app"
 
-  report="$(router_dokku traefik:report "$app")"
-  router_detect_vendor_settings "$report" "Traefik" "traefik:set" '^last visited at'
+  report="$(routing_dokku traefik:report "$app")"
+  routing_detect_vendor_settings "$report" "Traefik" "traefik:set" '^last visited at'
 
   # Traefik is configured by Docker labels, so labels attached through
   # docker-options are part of this app's routing surface.
-  labels="$(router_dokku docker-options:report "$app" | grep -o 'traefik\.[^ "]*' || true)"
+  labels="$(routing_dokku docker-options:report "$app" | grep -o 'traefik\.[^ "]*' || true)"
   while IFS= read -r label; do
     [[ -z "$label" ]] && continue
     case "$label" in

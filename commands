@@ -5,43 +5,43 @@ set -eo pipefail
 PLUGIN_BASE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$PLUGIN_BASE_PATH/config"
 
-[[ " router " == *" $1 "* ]] || [[ "$1" == "router:"* ]] || exit "$DOKKU_NOT_IMPLEMENTED_EXIT"
+[[ " routing " == *" $1 "* ]] || [[ "$1" == "routing:"* ]] || exit "$DOKKU_NOT_IMPLEMENTED_EXIT"
 
 show_help() {
   cat <<EOF
-usage: dokku router[:COMMAND]
+usage: dokku routing[:COMMAND]
 
 Audit and plan migrations between Dokku proxy implementations.
 
-dokku router commands:
+dokku routing commands:
 
-    router                                     portability summary for every app
-    router:report <app>                        detailed proxy analysis for one app
-    router:plan <app> <target-proxy>           migration plan for moving an app
-    router:list                                installed and available proxies
-    router:compare <proxy> <proxy>             capability matrix for two proxies
-    router:help                                show this message
+    routing                                    portability summary for every app
+    routing:report <app>                        detailed proxy analysis for one app
+    routing:plan <app> <target-proxy>           migration plan for moving an app
+    routing:list                                installed and available proxies
+    routing:compare <proxy> <proxy>             capability matrix for two proxies
+    routing:help                                show this message
 
-Classification used by router:report and router:plan:
+Classification used by routing:report and routing:plan:
 
     ✅  Portable                    Dokku owns it; it survives the swap as-is
     🔄  Auto-translatable           real setting, re-expressed for the target
     ⚠   Manual migration required   partial support, or config we cannot read
     ❌  Unsupported                 the target proxy has no equivalent
 
-Most commands accept --format json. router:plan is text only.
+Most commands accept --format json. routing:plan is text only.
 EOF
 }
 
 case "$1" in
-  router:help)
+  routing:help)
     show_help
     ;;
-  router | router:*)
-    if [[ "$1" == "router" ]]; then
+  routing | routing:*)
+    if [[ "$1" == "routing" ]]; then
       subcommand="summary"
     else
-      subcommand="${1#router:}"
+      subcommand="${1#routing:}"
     fi
     shift
 
@@ -52,8 +52,8 @@ case "$1" in
     if [[ -x "$subcommand_file" ]]; then
       exec "$subcommand_file" "$@"
     else
-      echo "Unknown command: router:$subcommand" >&2
-      echo "Run 'dokku router:help' for usage" >&2
+      echo "Unknown command: routing:$subcommand" >&2
+      echo "Run 'dokku routing:help' for usage" >&2
       exit 1
     fi
     ;;

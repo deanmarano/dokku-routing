@@ -6,12 +6,12 @@ PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$PLUGIN_ROOT/config"
 source "$PLUGIN_ROOT/functions"
 
-[[ "${1:-}" == router:* ]] && shift
-router_parse_format "$@"
+[[ "${1:-}" == routing:* ]] && shift
+routing_parse_format "$@"
 
-router_load_levels
+routing_load_levels
 
-APPS="$(router_list_apps)"
+APPS="$(routing_list_apps)"
 
 # For one app: current proxy, capability count, whether custom config is
 # involved, and which targets it could move to without losing anything.
@@ -20,22 +20,22 @@ analyze() {
   local proxy detected caps target class
   local clean=() blocked=()
 
-  proxy="$(router_app_proxy "$app")"
-  detected="$(router_app_capabilities "$app" "$proxy")"
+  proxy="$(routing_app_proxy "$app")"
+  detected="$(routing_app_capabilities "$app" "$proxy")"
   caps="$(cut -f1 <<<"$detected" | grep -v '^$' | sort -u || true)"
 
   local custom="no"
   grep -q '^raw-config' <<<"$detected" && custom="yes"
 
   local target_list
-  target_list="$(router_list_providers | grep -vx "$proxy" || true)"
+  target_list="$(routing_list_providers | grep -vx "$proxy" || true)"
 
   while read -r target; do
     [[ -z "$target" ]] && continue
     local worst="portable"
     while read -r key; do
       [[ -z "$key" ]] && continue
-      class="$(router_classify "$key" "$target")"
+      class="$(routing_classify "$key" "$target")"
       case "$class" in
         unsupported) worst="unsupported" ;;
         manual) [[ "$worst" != "unsupported" ]] && worst="manual" ;;
@@ -84,7 +84,7 @@ emit_text() {
   done <<<"$ROWS"
   [[ $any_blocked -eq 1 ]] && echo
 
-  echo "Run 'dokku router:report <app>' for detail, or 'dokku router:plan <app> <proxy>' for a migration plan."
+  echo "Run 'dokku routing:report <app>' for detail, or 'dokku routing:plan <app> <proxy>' for a migration plan."
 }
 
 emit_json() {
@@ -95,7 +95,7 @@ emit_json() {
     [[ $first -eq 0 ]] && printf ','
     first=0
     printf '{"app":%s,"proxy":%s,"capability_count":%s,"custom_config":%s,"can_move_to":[%s],"blocked_for":[%s]}' \
-      "$(router_json_string "$app")" "$(router_json_string "$proxy")" "${count:-0}" \
+      "$(routing_json_string "$app")" "$(routing_json_string "$proxy")" "${count:-0}" \
       "$([[ "$custom" == "yes" ]] && echo true || echo false)" \
       "$(tr ',' '\n' <<<"$clean" | grep -v '^$' | sed 's/.*/"&"/' | paste -sd, -)" \
       "$(tr ',' '\n' <<<"$blocked" | grep -v '^$' | sed 's/.*/"&"/' | paste -sd, -)"
@@ -103,7 +103,7 @@ emit_json() {
   printf ']}\n'
 }
 
-if [[ "$ROUTER_FORMAT" == "json" ]]; then
+if [[ "$ROUTING_FORMAT" == "json" ]]; then
   emit_json
 else
   emit_text

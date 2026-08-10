@@ -3,9 +3,9 @@ set -eo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config"
 
-echo "-----> Creating router data directory"
+echo "-----> Creating routing data directory"
 mkdir -p "$PLUGIN_CONTRIB_ROOT"
 
 chown -R "${DOKKU_SYSTEM_USER:-dokku}:${DOKKU_SYSTEM_GROUP:-dokku}" "$PLUGIN_DATA_ROOT" 2>/dev/null || true
 
-echo "-----> Router plugin installed successfully"
+echo "-----> Routing plugin installed successfully"

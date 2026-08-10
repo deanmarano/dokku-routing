@@ -1,4 +1,4 @@
-# dokku-router
+# dokku-routing
 
 Audit and plan migrations between Dokku proxy implementations.
 
@@ -8,29 +8,29 @@ supports each capability, and every app is measured against that model. Adding a
 proxy means adding one file. Nothing in the plugin knows about specific proxy
 pairs.
 
-`proxy:*` is Dokku core configuring the proxy you use. `router:*` analyses and
+`proxy:*` is Dokku core configuring the proxy you use. `routing:*` analyses and
 compares the proxies you *could* use.
 
 ## Install
 
 ```
-dokku plugin:install https://github.com/deanmarano/dokku-routing.git router
+dokku plugin:install https://github.com/deanmarano/dokku-routing.git routing
 ```
 
 ## Commands
 
 ```
-dokku router                            portability summary for every app
-dokku router:report <app>               detailed proxy analysis for one app
-dokku router:plan <app> <target-proxy>  migration plan for moving an app
-dokku router:list                       installed and available proxies
-dokku router:compare <proxy> <proxy>    capability matrix for two proxies
+dokku routing                            portability summary for every app
+dokku routing:report <app>               detailed proxy analysis for one app
+dokku routing:plan <app> <target-proxy>  migration plan for moving an app
+dokku routing:list                       installed and available proxies
+dokku routing:compare <proxy> <proxy>    capability matrix for two proxies
 ```
 
-`router`, `router:report`, `router:list` and `router:compare` accept
-`--format json`. `router:plan` is text only.
+`routing`, `routing:report`, `routing:list` and `routing:compare` accept
+`--format json`. `routing:plan` is text only.
 
-A `router:migrate` command is deliberately absent. The model has to prove itself
+A `routing:migrate` command is deliberately absent. The model has to prove itself
 on real apps before anything in this plugin is allowed to change them.
 
 ## What it inspects
@@ -60,7 +60,7 @@ The grade falls out of two facts: how the target adapter grades the capability
 registry (`dokku` / `proxy` / `opaque`). There is no per-pair logic anywhere.
 
 ```
-$ dokku router
+$ dokku routing
 APP                      PROXY        CAPS CUSTOM   CAN MOVE TO
 ---                      -----        ---- ------   -----------
 blog                     nginx           6 no       caddy, haproxy, openresty, traefik
@@ -72,7 +72,7 @@ Blocked moves
 ```
 
 ```
-$ dokku router:plan dashboard traefik
+$ dokku routing:plan dashboard traefik
 =====> Migration plan: dashboard  nginx -> traefik
 
 ✅ Portable (5)
@@ -119,14 +119,14 @@ proxy_capabilities() {           # <capability>\t<full|partial|none>\t<note>
 
 proxy_detect() {                 # optional; <capability>\t<detail>\t<source>
   local app="$1"
-  router_detect_common "$app"    # shared: domains, ports, TLS, deploy checks
+  routing_detect_common "$app"    # shared: domains, ports, TLS, deploy checks
   ...
 }
 ```
 
 `nginx` and `traefik` ship with detectors. `caddy`, `haproxy` and `openresty`
-declare their capability matrices only, which is enough for `router:compare`,
-`router:plan` and the summary to treat them as real targets. Adding a detector
+declare their capability matrices only, which is enough for `routing:compare`,
+`routing:plan` and the summary to treat them as real targets. Adding a detector
 later requires no changes elsewhere.
 
 Adapters are sourced in subshells, so several can be interrogated in one run
@@ -135,8 +135,8 @@ without their functions colliding.
 ### Other plugins
 
 A plugin that changes routing -- an SSO plugin adding forward auth, say --
-declares that itself, through a `router-app-capabilities` plugn trigger or a
-drop-in file in `/var/lib/dokku/data/router/contrib/`. Those capabilities then
+declares that itself, through a `routing-app-capabilities` plugn trigger or a
+drop-in file in `/var/lib/dokku/data/routing/contrib/`. Those capabilities then
 flow through reports, plans and the summary exactly like a proxy's own, with no
 special cases. See [contrib/README.md](contrib/README.md).
 
@@ -151,7 +151,7 @@ make install      install into the local Dokku
 ```
 
 Tests are TypeScript under vitest and need a real Dokku. They create and destroy
-apps named `router-*` and write files under `/home/dokku/router-*/`, so point
+apps named `routing-*` and write files under `/home/dokku/routing-*/`, so point
 them at something disposable:
 
 | | |

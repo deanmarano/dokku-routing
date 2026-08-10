@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { DokkuRouter } from '../helpers/dokku';
+import { DokkuRouting } from '../helpers/dokku';
 
-const APP = 'router-contrib-test';
-const DROP_IN = '/var/lib/dokku/data/router/contrib/router-test-fixture.sh';
+const APP = 'routing-contrib-test';
+const DROP_IN = '/var/lib/dokku/data/routing/contrib/routing-test-fixture.sh';
 
 // A stand-in for a plugin like dokku-sso: it declares that it puts forward
-// auth in front of one specific app, without dokku-router knowing it exists.
+// auth in front of one specific app, without dokku-routing knowing it exists.
 const FIXTURE = `
 contrib_app_capabilities() {
   [[ "$1" == "${APP}" ]] || return 0
@@ -19,12 +19,12 @@ contrib_proxy_support() {
 `;
 
 describe('third-party capability contributions', () => {
-  let dokku: DokkuRouter;
+  let dokku: DokkuRouting;
 
   beforeAll(() => {
-    dokku = new DokkuRouter();
+    dokku = new DokkuRouting();
     dokku.createTestApp(APP);
-    dokku.addDomain(APP, 'router-contrib-test.example.com');
+    dokku.addDomain(APP, 'routing-contrib-test.example.com');
     dokku.writeHostFile(DROP_IN, FIXTURE);
   });
 
@@ -41,7 +41,7 @@ describe('third-party capability contributions', () => {
   });
 
   it('only attributes the capability to the app the plugin named', async () => {
-    const other = 'router-contrib-other';
+    const other = 'routing-contrib-other';
     dokku.createTestApp(other);
     const data = await dokku.json('report', other);
     expect(data.capabilities.find((c: any) => c.key === 'forward-auth')).toBeUndefined();
@@ -55,7 +55,7 @@ describe('third-party capability contributions', () => {
     expect(result.stdout).toContain('Blocked.');
   });
 
-  it('surfaces declared proxy support in router:list', async () => {
+  it('surfaces declared proxy support in routing:list', async () => {
     const data = await dokku.json('list');
     const rows = data.contributions.filter((c: any) => c.plugin === 'test-fixture');
     expect(rows).toHaveLength(2);

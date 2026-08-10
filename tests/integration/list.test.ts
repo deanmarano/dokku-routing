@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { DokkuRouter } from '../helpers/dokku';
+import { DokkuRouting } from '../helpers/dokku';
 
-describe('router:list', () => {
-  let dokku: DokkuRouter;
+describe('routing:list', () => {
+  let dokku: DokkuRouting;
 
   beforeAll(() => {
-    dokku = new DokkuRouter();
+    dokku = new DokkuRouting();
   });
 
   it('lists every bundled proxy adapter', async () => {
@@ -37,11 +37,11 @@ describe('router:list', () => {
   });
 });
 
-describe('router:compare', () => {
-  let dokku: DokkuRouter;
+describe('routing:compare', () => {
+  let dokku: DokkuRouting;
 
   beforeAll(() => {
-    dokku = new DokkuRouter();
+    dokku = new DokkuRouting();
   });
 
   it('grades the same capability differently for nginx and traefik', async () => {

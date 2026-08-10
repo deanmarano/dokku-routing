@@ -1,5 +1,5 @@
 {
-  "name": "dokku-router-tests",
+  "name": "dokku-routing-tests",
   "type": "module",
   "scripts": {
     "test": "vitest run",

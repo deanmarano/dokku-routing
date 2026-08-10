@@ -1,21 +1,21 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { DokkuRouter } from '../helpers/dokku';
+import { DokkuRouting } from '../helpers/dokku';
 
-const PLAIN = 'router-summary-plain';
-const CUSTOM = 'router-summary-custom';
+const PLAIN = 'routing-summary-plain';
+const CUSTOM = 'routing-summary-custom';
 const SIGIL = `/home/dokku/${CUSTOM}/nginx.conf.sigil`;
 
-describe('router (summary)', () => {
-  let dokku: DokkuRouter;
+describe('routing (summary)', () => {
+  let dokku: DokkuRouting;
 
   beforeAll(() => {
-    dokku = new DokkuRouter();
+    dokku = new DokkuRouting();
 
     dokku.createTestApp(PLAIN);
-    dokku.addDomain(PLAIN, 'router-summary-plain.example.com');
+    dokku.addDomain(PLAIN, 'routing-summary-plain.example.com');
 
     dokku.createTestApp(CUSTOM);
-    dokku.addDomain(CUSTOM, 'router-summary-custom.example.com');
+    dokku.addDomain(CUSTOM, 'routing-summary-custom.example.com');
     dokku.writeHostFile(SIGIL, '# custom vhost\n');
   });
 
@@ -25,21 +25,21 @@ describe('router (summary)', () => {
   });
 
   it('includes every app on the host', async () => {
-    const data = await dokku.json('router');
+    const data = await dokku.json('routing');
     const names = data.apps.map((a: any) => a.app);
     expect(names).toContain(PLAIN);
     expect(names).toContain(CUSTOM);
   });
 
   it('flags which apps carry custom proxy config', async () => {
-    const data = await dokku.json('router');
+    const data = await dokku.json('routing');
     const byApp = Object.fromEntries(data.apps.map((a: any) => [a.app, a]));
     expect(byApp[PLAIN].custom_config).toBe(false);
     expect(byApp[CUSTOM].custom_config).toBe(true);
   });
 
   it('splits targets into clean moves and blocked moves', async () => {
-    const data = await dokku.json('router');
+    const data = await dokku.json('routing');
     const byApp = Object.fromEntries(data.apps.map((a: any) => [a.app, a]));
 
     // A plain app can move anywhere.
@@ -52,14 +52,14 @@ describe('router (summary)', () => {
   });
 
   it('never lists an app as its own migration target', async () => {
-    const data = await dokku.json('router');
+    const data = await dokku.json('routing');
     for (const app of data.apps) {
       expect([...app.can_move_to, ...app.blocked_for]).not.toContain(app.proxy);
     }
   });
 
   it('renders a table with a blocked-moves section in text mode', async () => {
-    const result = await dokku.exec('router');
+    const result = await dokku.exec('routing');
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('CAN MOVE TO');
     expect(result.stdout).toContain(PLAIN);
@@ -67,7 +67,7 @@ describe('router (summary)', () => {
   });
 
   it('rejects an unknown --format', async () => {
-    const result = await dokku.exec('router', '--format', 'yaml');
+    const result = await dokku.exec('routing', '--format', 'yaml');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('Unknown format');
   });

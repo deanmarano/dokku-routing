@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-export PLUGIN_COMMAND_PREFIX="router"
-export PLUGIN_DATA_ROOT="${DOKKU_LIB_ROOT:-/var/lib/dokku}/data/router"
+export PLUGIN_COMMAND_PREFIX="routing"
+export PLUGIN_DATA_ROOT="${DOKKU_LIB_ROOT:-/var/lib/dokku}/data/routing"
 export PLUGIN_CONTRIB_ROOT="$PLUGIN_DATA_ROOT/contrib"
 
 export DOKKU_BIN="${DOKKU_BIN:-/usr/bin/dokku}"

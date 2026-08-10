@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HAProxy adapter (capability declarations only -- no live inspection yet).
 
-# shellcheck disable=SC2034  # metadata read by the router plugin after sourcing
+# shellcheck disable=SC2034  # metadata read by the routing plugin after sourcing
 PROXY_NAME="haproxy"
 PROXY_DESCRIPTION="High-performance L4/L7 load balancer with a static configuration"
 PROXY_DOKKU_PLUGIN="haproxy-vhosts"

@@ -1,8 +1,8 @@
 # Declaring routing capabilities from another plugin
 
-`dokku-router` has no special cases for any plugin. If your plugin changes how
+`dokku-routing` has no special cases for any plugin. If your plugin changes how
 traffic reaches an app -- an SSO plugin adding forward auth, a WAF plugin adding
-rate limiting, anything that writes proxy config -- it tells `router` in its own
+rate limiting, anything that writes proxy config -- it tells `routing` in its own
 terms and shows up in reports, plans and the summary automatically.
 
 There are two channels. Use the trigger if you control the plugin; use the
@@ -12,7 +12,7 @@ drop-in if you do not.
 
 Drop an executable named after the trigger at the root of your plugin.
 
-### `router-app-capabilities <app>`
+### `routing-app-capabilities <app>`
 
 Emit one tab-separated line per capability your plugin causes this app to use:
 
@@ -35,7 +35,7 @@ printf 'vendor-settings\tbypass paths configured\tsso:bypass\n'
 
 Emitting nothing for an unaffected app is correct and expected.
 
-### `router-proxy-support`
+### `routing-proxy-support`
 
 Emit which proxies your plugin itself works with. No arguments.
 
@@ -50,18 +50,18 @@ printf 'sso\ttraefik\tfull\tforwardAuth middleware\n'
 printf 'sso\tcaddy\tnone\tno Caddy integration yet\n'
 ```
 
-This is what makes `router:plan myapp traefik` able to say that moving the app
-would also require moving your plugin's integration -- without `router` knowing
+This is what makes `routing:plan myapp traefik` able to say that moving the app
+would also require moving your plugin's integration -- without `routing` knowing
 your plugin exists.
 
 ## Channel 2: drop-in files
 
 For plugins you cannot modify, put a shell file in
-`/var/lib/dokku/data/router/contrib/`. It is sourced in a subshell and may
+`/var/lib/dokku/data/routing/contrib/`. It is sourced in a subshell and may
 define either function:
 
 ```bash
-# /var/lib/dokku/data/router/contrib/my-plugin.sh
+# /var/lib/dokku/data/routing/contrib/my-plugin.sh
 contrib_app_capabilities() {
   local app="$1"
   ...

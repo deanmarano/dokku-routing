@@ -8,21 +8,21 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/capabilities"
 
 # Run a dokku command, swallowing failures. Plugins we ask about may not be
 # installed, and a missing report is information, not an error.
-router_dokku() {
+routing_dokku() {
   "$DOKKU_BIN" "$@" 2>/dev/null || true
 }
 
 # True if a dokku command namespace exists on this host.
-router_dokku_has() {
+routing_dokku_has() {
   "$DOKKU_BIN" "$1" --help &>/dev/null || "$DOKKU_BIN" "$1" &>/dev/null
 }
 
 # Pull a single field out of a `dokku *:report` block.
 #
-#   router_report_field "$report" "Nginx client max body size"
+#   routing_report_field "$report" "Nginx client max body size"
 #
 # Report lines are "       Nginx client max body size:    10m".
-router_report_field() {
+routing_report_field() {
   local report="$1" field="$2" line
   while IFS= read -r line; do
     line="${line#"${line%%[![:space:]]*}"}"
@@ -36,27 +36,27 @@ router_report_field() {
   return 1
 }
 
-router_app_exists() {
+routing_app_exists() {
   "$DOKKU_BIN" apps:exists "$1" &>/dev/null
 }
 
-router_list_apps() {
-  router_dokku apps:list | tail -n +2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' || true
+routing_list_apps() {
+  routing_dokku apps:list | tail -n +2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' || true
 }
 
 # The proxy an app is currently routed through.
-router_app_proxy() {
+routing_app_proxy() {
   local app="$1" report proxy
-  report="$(router_dokku proxy:report "$app")"
-  proxy="$(router_report_field "$report" "Proxy type" || true)"
+  report="$(routing_dokku proxy:report "$app")"
+  proxy="$(routing_report_field "$report" "Proxy type" || true)"
   [[ -z "$proxy" ]] && proxy="nginx"
   echo "$proxy"
 }
 
-router_app_proxy_enabled() {
+routing_app_proxy_enabled() {
   local app="$1" report enabled
-  report="$(router_dokku proxy:report "$app")"
-  enabled="$(router_report_field "$report" "Proxy enabled" || true)"
+  report="$(routing_dokku proxy:report "$app")"
+  enabled="$(routing_report_field "$report" "Proxy enabled" || true)"
   [[ "$enabled" == "false" ]] && return 1
   return 0
 }
@@ -68,15 +68,15 @@ router_app_proxy_enabled() {
 # run without their function definitions colliding.
 # ---------------------------------------------------------------------------
 
-router_provider_path() {
+routing_provider_path() {
   echo "$PLUGIN_PROVIDER_ROOT/$1"
 }
 
-router_provider_exists() {
-  [[ -f "$(router_provider_path "$1")" ]]
+routing_provider_exists() {
+  [[ -f "$(routing_provider_path "$1")" ]]
 }
 
-router_list_providers() {
+routing_list_providers() {
   local f
   for f in "$PLUGIN_PROVIDER_ROOT"/*; do
     [[ -f "$f" ]] || continue
@@ -85,66 +85,66 @@ router_list_providers() {
 }
 
 # Echo one declared metadata variable from an adapter.
-router_provider_meta() {
+routing_provider_meta() {
   local name="$1" var="$2"
-  router_provider_exists "$name" || return 1
+  routing_provider_exists "$name" || return 1
   (
     # shellcheck source=/dev/null
-    source "$(router_provider_path "$name")"
+    source "$(routing_provider_path "$name")"
     echo "${!var:-}"
   )
 }
 
 # Emit "capability<TAB>level<TAB>note" for every capability the adapter grades.
-router_provider_capabilities() {
+routing_provider_capabilities() {
   local name="$1"
-  router_provider_exists "$name" || return 1
+  routing_provider_exists "$name" || return 1
   (
     # shellcheck source=/dev/null
-    source "$(router_provider_path "$name")"
+    source "$(routing_provider_path "$name")"
     proxy_capabilities
   )
 }
 
 # Read every adapter's matrix into memory once. Sourcing adapters is the only
 # expensive part of most commands, and comparisons need all of them anyway.
-declare -gA ROUTER_LEVEL=()
-declare -gA ROUTER_NOTE=()
-ROUTER_LEVELS_LOADED=""
+declare -gA ROUTING_LEVEL=()
+declare -gA ROUTING_NOTE=()
+ROUTING_LEVELS_LOADED=""
 
-router_load_levels() {
-  [[ -n "$ROUTER_LEVELS_LOADED" ]] && return 0
+routing_load_levels() {
+  [[ -n "$ROUTING_LEVELS_LOADED" ]] && return 0
   local provider cap level note
-  for provider in $(router_list_providers); do
+  for provider in $(routing_list_providers); do
     while IFS=$'\t' read -r cap level note; do
       [[ -z "$cap" ]] && continue
-      ROUTER_LEVEL["$provider|$cap"]="$level"
-      ROUTER_NOTE["$provider|$cap"]="$note"
-    done < <(router_provider_capabilities "$provider")
+      ROUTING_LEVEL["$provider|$cap"]="$level"
+      ROUTING_NOTE["$provider|$cap"]="$note"
+    done < <(routing_provider_capabilities "$provider")
   done
-  ROUTER_LEVELS_LOADED="yes"
+  ROUTING_LEVELS_LOADED="yes"
 }
 
 # Grade of one capability for one proxy: full | partial | none.
 # Capabilities an adapter never mentions are treated as unsupported.
-router_provider_level() {
-  router_load_levels
-  echo "${ROUTER_LEVEL["$1|$2"]:-none}"
+routing_provider_level() {
+  routing_load_levels
+  echo "${ROUTING_LEVEL["$1|$2"]:-none}"
 }
 
-router_provider_note() {
-  router_load_levels
-  echo "${ROUTER_NOTE["$1|$2"]:-}"
+routing_provider_note() {
+  routing_load_levels
+  echo "${ROUTING_NOTE["$1|$2"]:-}"
 }
 
 # Emit "capability<TAB>detail<TAB>source" for what an app actually uses.
 # Adapters without a detector are metadata-only and contribute nothing.
-router_provider_detect() {
+routing_provider_detect() {
   local name="$1" app="$2"
-  router_provider_exists "$name" || return 1
+  routing_provider_exists "$name" || return 1
   (
     # shellcheck source=/dev/null
-    source "$(router_provider_path "$name")"
+    source "$(routing_provider_path "$name")"
     declare -F proxy_detect >/dev/null || exit 0
     proxy_detect "$app"
   )
@@ -152,14 +152,14 @@ router_provider_detect() {
 
 # True if the adapter inspects live app state rather than only declaring a
 # capability matrix.
-router_provider_inspects() {
-  [[ "$(router_provider_meta "$1" PROXY_INSPECTION)" == "full" ]]
+routing_provider_inspects() {
+  [[ "$(routing_provider_meta "$1" PROXY_INSPECTION)" == "full" ]]
 }
 
 # Is this proxy actually installed on the host?
-router_provider_installed() {
+routing_provider_installed() {
   local name="$1" ns
-  ns="$(router_provider_meta "$name" PROXY_DOKKU_PLUGIN)"
+  ns="$(routing_provider_meta "$name" PROXY_DOKKU_PLUGIN)"
   [[ -z "$ns" ]] && return 1
   [[ -d "${DOKKU_LIB_ROOT:-/var/lib/dokku}/plugins/enabled/$ns" ]]
 }
@@ -173,11 +173,11 @@ router_provider_installed() {
 
 # Capabilities other plugins impose on an app.
 # Emits "capability<TAB>detail<TAB>source".
-router_contrib_app_capabilities() {
+routing_contrib_app_capabilities() {
   local app="$1" f
 
   if command -v "$PLUGN_BIN" &>/dev/null; then
-    "$PLUGN_BIN" trigger router-app-capabilities "$app" 2>/dev/null || true
+    "$PLUGN_BIN" trigger routing-app-capabilities "$app" 2>/dev/null || true
   fi
 
   for f in "$PLUGIN_CONTRIB_ROOT"/*.sh; do
@@ -193,11 +193,11 @@ router_contrib_app_capabilities() {
 
 # Which proxies other plugins say they work with.
 # Emits "plugin<TAB>proxy<TAB>level<TAB>note".
-router_contrib_proxy_support() {
+routing_contrib_proxy_support() {
   local f
 
   if command -v "$PLUGN_BIN" &>/dev/null; then
-    "$PLUGN_BIN" trigger router-proxy-support 2>/dev/null || true
+    "$PLUGN_BIN" trigger routing-proxy-support 2>/dev/null || true
   fi
 
   for f in "$PLUGIN_CONTRIB_ROOT"/*.sh; do
@@ -213,11 +213,11 @@ router_contrib_proxy_support() {
 
 # Everything an app uses: its current proxy's detector plus contributions,
 # deduplicated on capability+source.
-router_app_capabilities() {
+routing_app_capabilities() {
   local app="$1" proxy="$2"
   {
-    router_provider_detect "$proxy" "$app"
-    router_contrib_app_capabilities "$app"
+    routing_provider_detect "$proxy" "$app"
+    routing_contrib_app_capabilities "$app"
   } | awk -F'\t' 'NF>=1 && $1!="" && !seen[$1 FS $3]++'
 }
 
@@ -228,18 +228,18 @@ router_app_capabilities() {
 # so adapters share one detector for it and only implement their own quirks.
 # ---------------------------------------------------------------------------
 
-router_detect_common() {
+routing_detect_common() {
   local app="$1" report value
 
-  report="$(router_dokku domains:report "$app")"
-  value="$(router_report_field "$report" "Domains app vhosts" || true)"
+  report="$(routing_dokku domains:report "$app")"
+  value="$(routing_report_field "$report" "Domains app vhosts" || true)"
   if [[ -n "$value" ]]; then
     printf 'domains\t%s\tdomains\n' "$value"
     [[ "$value" == *"*"* ]] && printf 'wildcard-domains\t%s\tdomains\n' "$value"
   fi
 
-  report="$(router_dokku proxy:report "$app")"
-  value="$(router_report_field "$report" "Proxy port map" || true)"
+  report="$(routing_dokku proxy:report "$app")"
+  value="$(routing_report_field "$report" "Proxy port map" || true)"
   if [[ -n "$value" ]]; then
     printf 'port-mapping\t%s\tproxy:ports\n' "$value"
     local mapping
@@ -256,14 +256,14 @@ router_detect_common() {
     printf 'tls-custom-cert\t%s\tcerts\n' "$DOKKU_ROOT/$app/tls/server.crt"
   fi
 
-  if router_dokku letsencrypt:list | awk 'NR>1 {print $1}' | grep -qx "$app"; then
+  if routing_dokku letsencrypt:list | awk 'NR>1 {print $1}' | grep -qx "$app"; then
     printf 'tls-acme\tmanaged by dokku-letsencrypt\tletsencrypt\n'
   fi
 
-  report="$(router_dokku checks:report "$app")"
-  value="$(router_report_field "$report" "Checks wait to retire" || true)"
+  report="$(routing_dokku checks:report "$app")"
+  value="$(routing_report_field "$report" "Checks wait to retire" || true)"
   local skipped
-  skipped="$(router_report_field "$report" "Checks skipped" || true)"
+  skipped="$(routing_report_field "$report" "Checks skipped" || true)"
   if [[ -n "$value" && "$skipped" != "_all_" ]]; then
     printf 'deploy-checks\twait-to-retire=%s\tchecks\n' "$value"
   fi
@@ -272,7 +272,7 @@ router_detect_common() {
 # Report app-level properties from a `dokku <plugin>:report` block as vendor
 # settings. `prefix` is stripped from the field label; `skip_re` is an extended
 # regex of labels already claimed by a more specific capability.
-router_detect_vendor_settings() {
+routing_detect_vendor_settings() {
   local report="$1" prefix="$2" source="$3" skip_re="${4:-}" line field value
 
   while IFS= read -r line; do
@@ -285,6 +285,11 @@ router_detect_vendor_settings() {
     value="${value%"${value##*[![:space:]]}"}"
     [[ -z "$value" ]] && continue
     field="${field#"$prefix "}"
+    # Dokku reports each property three times: the app-level override, the
+    # global default, and the "computed" effective value. Only the first is a
+    # decision someone made about this app; the other two are noise that would
+    # make every app look heavily customised.
+    [[ "$field" == computed\ * || "$field" == global\ * ]] && continue
     [[ -n "$skip_re" ]] && [[ "$field" =~ $skip_re ]] && continue
     printf 'vendor-settings\t%s=%s\t%s\n' "${field// /-}" "$value" "$source"
   done <<<"$report"
@@ -294,12 +299,12 @@ router_detect_vendor_settings() {
 # Classification
 # ---------------------------------------------------------------------------
 
-# router_classify <capability> <target-proxy>
+# routing_classify <capability> <target-proxy>
 # -> portable | translatable | manual | unsupported
-router_classify() {
+routing_classify() {
   local cap="$1" target="$2" level ownership
-  level="$(router_provider_level "$target" "$cap")"
-  ownership="$(router_capability_field "$cap" ownership || echo proxy)"
+  level="$(routing_provider_level "$target" "$cap")"
+  ownership="$(routing_capability_field "$cap" ownership || echo proxy)"
 
   [[ "$level" == "none" ]] && { echo unsupported; return; }
   [[ "$ownership" == "opaque" ]] && { echo manual; return; }
@@ -308,7 +313,7 @@ router_classify() {
   echo translatable
 }
 
-router_class_symbol() {
+routing_class_symbol() {
   case "$1" in
     portable) echo "✅" ;;
     translatable) echo "🔄" ;;
@@ -318,7 +323,7 @@ router_class_symbol() {
   esac
 }
 
-router_class_label() {
+routing_class_label() {
   case "$1" in
     portable) echo "Portable" ;;
     translatable) echo "Auto-translatable" ;;
@@ -327,7 +332,7 @@ router_class_label() {
   esac
 }
 
-router_level_symbol() {
+routing_level_symbol() {
   case "$1" in
     full) echo "✓" ;;
     partial) echo "~" ;;
@@ -339,7 +344,7 @@ router_level_symbol() {
 # Output helpers
 # ---------------------------------------------------------------------------
 
-router_json_escape() {
+routing_json_escape() {
   local s="$1"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
@@ -349,24 +354,24 @@ router_json_escape() {
   printf '%s' "$s"
 }
 
-router_json_string() {
-  printf '"%s"' "$(router_json_escape "$1")"
+routing_json_string() {
+  printf '"%s"' "$(routing_json_escape "$1")"
 }
 
 # Consume --format <fmt> / --format=<fmt> from the argument list.
-# Sets ROUTER_FORMAT and re-exports the remaining args in ROUTER_ARGS.
-router_parse_format() {
-  ROUTER_FORMAT="text"
-  ROUTER_ARGS=()
+# Sets ROUTING_FORMAT and re-exports the remaining args in ROUTING_ARGS.
+routing_parse_format() {
+  ROUTING_FORMAT="text"
+  ROUTING_ARGS=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --format) ROUTER_FORMAT="${2:-}"; shift 2 ;;
-      --format=*) ROUTER_FORMAT="${1#--format=}"; shift ;;
-      *) ROUTER_ARGS+=("$1"); shift ;;
+      --format) ROUTING_FORMAT="${2:-}"; shift 2 ;;
+      --format=*) ROUTING_FORMAT="${1#--format=}"; shift ;;
+      *) ROUTING_ARGS+=("$1"); shift ;;
     esac
   done
-  case "$ROUTER_FORMAT" in
+  case "$ROUTING_FORMAT" in
     text|json) ;;
-    *) echo "!     Unknown format '$ROUTER_FORMAT' (expected text or json)" >&2; return 1 ;;
+    *) echo "!     Unknown format '$ROUTING_FORMAT' (expected text or json)" >&2; return 1 ;;
   esac
 }

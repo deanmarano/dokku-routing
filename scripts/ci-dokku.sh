@@ -54,19 +54,19 @@ done
 
 docker exec "$CONTAINER" dokku version || die "Dokku never became ready"
 
-echo "-----> Installing the router plugin"
-PLUGIN_DIR=/var/lib/dokku/plugins/available/router
+echo "-----> Installing the routing plugin"
+PLUGIN_DIR=/var/lib/dokku/plugins/available/routing
 docker exec "$CONTAINER" mkdir -p "$PLUGIN_DIR"
 for item in plugin.toml config commands install functions lib providers subcommands; do
   docker cp "$REPO_ROOT/$item" "$CONTAINER:$PLUGIN_DIR/"
 done
-docker exec "$CONTAINER" ln -sfn "$PLUGIN_DIR" /var/lib/dokku/plugins/enabled/router
+docker exec "$CONTAINER" ln -sfn "$PLUGIN_DIR" /var/lib/dokku/plugins/enabled/routing
 docker exec "$CONTAINER" "$PLUGIN_DIR/install"
 
 echo "-----> Verifying the plugin is dispatchable"
 running || die "Container exited while installing the plugin"
-docker exec "$CONTAINER" dokku router:help >/dev/null
-docker exec "$CONTAINER" dokku router:list
+docker exec "$CONTAINER" dokku routing:help >/dev/null
+docker exec "$CONTAINER" dokku routing:list
 
 # An app the tests do not own, so the summary always has something to report
 # and app-scoped assertions have a neighbour to be distinguished from.

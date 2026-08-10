@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { DokkuRouter } from '../helpers/dokku';
+import { DokkuRouting } from '../helpers/dokku';
 
-const APP = 'router-report-test';
+const APP = 'routing-report-test';
 const SIGIL = `/home/dokku/${APP}/nginx.conf.sigil`;
 
-describe('router:report', () => {
-  let dokku: DokkuRouter;
+describe('routing:report', () => {
+  let dokku: DokkuRouting;
 
   beforeAll(() => {
-    dokku = new DokkuRouter();
+    dokku = new DokkuRouting();
     dokku.createTestApp(APP);
-    dokku.addDomain(APP, 'router-report-test.example.com');
+    dokku.addDomain(APP, 'routing-report-test.example.com');
     dokku.setNginxProperty(APP, 'client-max-body-size', '25m');
     dokku.setNginxProperty(APP, 'proxy-read-timeout', '120s');
   });
@@ -21,7 +21,7 @@ describe('router:report', () => {
   });
 
   it('fails for an app that does not exist', async () => {
-    const result = await dokku.exec('report', 'router-report-nonexistent');
+    const result = await dokku.exec('report', 'routing-report-nonexistent');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('does not exist');
   });
@@ -36,7 +36,7 @@ describe('router:report', () => {
     const data = await dokku.json('report', APP);
     const domains = data.capabilities.find((c: any) => c.key === 'domains');
     expect(domains).toBeDefined();
-    expect(domains.detail).toContain('router-report-test.example.com');
+    expect(domains.detail).toContain('routing-report-test.example.com');
     expect(domains.source).toBe('domains');
   });
 

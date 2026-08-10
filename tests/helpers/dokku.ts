@@ -14,7 +14,7 @@ export interface ExecResult {
   stderr: string;
 }
 
-export class DokkuRouter {
+export class DokkuRouting {
   private apps: string[] = [];
 
   private isRemote(): boolean {
@@ -110,17 +110,17 @@ export class DokkuRouter {
     throw error;
   }
 
-  /** Run a `dokku router:*` command. */
+  /** Run a `dokku routing:*` command. */
   async exec(...args: string[]): Promise<ExecResult> {
-    const full = args[0]?.startsWith('router') ? args : ['router:' + args[0], ...args.slice(1)];
+    const full = args[0]?.startsWith('routing') ? args : ['routing:' + args[0], ...args.slice(1)];
     return this.spawnAsync(this.buildCommand(full));
   }
 
-  /** Run a `dokku router:*` command and parse its --format json output. */
+  /** Run a `dokku routing:*` command and parse its --format json output. */
   async json(...args: string[]): Promise<any> {
     const result = await this.exec(...args, '--format', 'json');
     if (result.exitCode !== 0) {
-      throw new Error(`router ${args.join(' ')} failed (${result.exitCode}): ${result.stderr}`);
+      throw new Error(`routing ${args.join(' ')} failed (${result.exitCode}): ${result.stderr}`);
     }
     return JSON.parse(result.stdout);
   }

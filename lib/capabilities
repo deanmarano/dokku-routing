@@ -18,7 +18,7 @@
 #   opaque  We cannot read the intent out of it (hand-written config, vendor
 #           labels). Always manual review, never auto-translated.
 
-router_capability_registry() {
+routing_capability_registry() {
   cat <<'EOF'
 domains|Domains / virtual hosts|routing|dokku
 wildcard-domains|Wildcard domains|routing|dokku
@@ -59,9 +59,9 @@ EOF
 }
 
 # Look up one field of a capability. Returns non-zero for unknown keys.
-router_capability_field() {
+routing_capability_field() {
   local key="$1" field="$2" line
-  line="$(router_capability_registry | grep "^${key}|" || true)"
+  line="$(routing_capability_registry | grep "^${key}|" || true)"
   [[ -z "$line" ]] && return 1
   IFS='|' read -r _ label category ownership <<<"$line"
   case "$field" in
@@ -72,10 +72,10 @@ router_capability_field() {
   esac
 }
 
-router_capability_label() {
-  router_capability_field "$1" label || echo "$1"
+routing_capability_label() {
+  routing_capability_field "$1" label || echo "$1"
 }
 
-router_capability_exists() {
-  router_capability_registry | grep -q "^${1}|"
+routing_capability_exists() {
+  routing_capability_registry | grep -q "^${1}|"
 }

@@ -16,10 +16,10 @@ lint: ## Run shellcheck on the plugin scripts
 	find subcommands providers -type f -exec shellcheck -x {} +
 
 install: ## Install the plugin into Dokku
-	sudo mkdir -p /var/lib/dokku/plugins/available/router
-	sudo cp -r plugin.toml config commands install functions lib providers subcommands /var/lib/dokku/plugins/available/router/
-	sudo ln -sf /var/lib/dokku/plugins/available/router /var/lib/dokku/plugins/enabled/router
-	sudo dokku plugin:install-dependencies router || true
+	sudo mkdir -p /var/lib/dokku/plugins/available/routing
+	sudo cp -r plugin.toml config commands install functions lib providers subcommands /var/lib/dokku/plugins/available/routing/
+	sudo ln -sf /var/lib/dokku/plugins/available/routing /var/lib/dokku/plugins/enabled/routing
+	sudo dokku plugin:install-dependencies routing || true
 
 test-docker: ## Boot a throwaway Dokku in Docker and run the tests against it
 	./scripts/ci-dokku.sh

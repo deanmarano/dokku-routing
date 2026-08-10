@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Caddy proxy adapter (capability declarations only -- no live inspection yet).
 
-# shellcheck disable=SC2034  # metadata read by the router plugin after sourcing
+# shellcheck disable=SC2034  # metadata read by the routing plugin after sourcing
 PROXY_NAME="caddy"
 PROXY_DESCRIPTION="Automatic HTTPS by default, configured through a Caddyfile"
 PROXY_DOKKU_PLUGIN="caddy-vhosts"
