@@ -49,8 +49,9 @@ export class DokkuRouter {
 
   /**
    * Dokku emits harmless noise on stderr after plugin installs and when the
-   * proxy is not reloadable in a test environment. Treat those as success when
-   * the command actually produced output.
+   * proxy is not reloadable in a test environment. Notably `apps:create` exits
+   * non-zero for an app with no release yet ("No web listeners specified"),
+   * which is exactly the state these tests want. Treat those as success.
    */
   private isHarmlessWarning(stderr: string): boolean {
     const lines = stderr.split('\n').filter((l) => l.trim());
@@ -60,6 +61,7 @@ export class DokkuRouter {
         (l) =>
           l.includes('main: command not found') ||
           l.includes('Checking nginx status is not possible') ||
+          l.includes('No web listeners specified') ||
           l.trim() === ''
       )
     );

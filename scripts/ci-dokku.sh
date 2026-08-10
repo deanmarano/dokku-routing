@@ -18,20 +18,41 @@ docker run -d --name "$CONTAINER" \
   -e DOKKU_SKIP_KEY_FILE=true \
   "$IMAGE" >/dev/null
 
-echo "-----> Waiting for Dokku to come up"
-for _ in $(seq 1 120); do
-  if docker exec "$CONTAINER" dokku version >/dev/null 2>&1; then
-    docker exec "$CONTAINER" dokku version
+running() {
+  [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" == "true" ]]
+}
+
+die() {
+  echo "!     $1" >&2
+  docker logs "$CONTAINER" 2>&1 | tail -60 >&2
+  exit 1
+}
+
+# The image's init copies skeletons into place and only then starts runit.
+# Installing a plugin before that finishes poisons the init: a later init step
+# iterates plugins, inherits our `commands` file's DOKKU_NOT_IMPLEMENTED_EXIT
+# (10) as its own status, and the container is killed. So wait for the whole
+# boot, not just for `dokku version` to answer.
+echo "-----> Waiting for the image's init to finish"
+for _ in $(seq 1 150); do
+  running || die "Container exited during boot"
+  if docker logs "$CONTAINER" 2>&1 | grep -q 'Runit started as PID'; then
     break
   fi
   sleep 2
 done
 
-if ! docker exec "$CONTAINER" dokku version >/dev/null 2>&1; then
-  echo "!     Dokku never became ready" >&2
-  docker logs "$CONTAINER" | tail -50 >&2
-  exit 1
-fi
+docker logs "$CONTAINER" 2>&1 | grep -q 'Runit started as PID' ||
+  die "Init never reached runit"
+
+echo "-----> Waiting for Dokku to answer"
+for _ in $(seq 1 60); do
+  running || die "Container exited before Dokku was ready"
+  docker exec "$CONTAINER" dokku version >/dev/null 2>&1 && break
+  sleep 2
+done
+
+docker exec "$CONTAINER" dokku version || die "Dokku never became ready"
 
 echo "-----> Installing the router plugin"
 PLUGIN_DIR=/var/lib/dokku/plugins/available/router
@@ -43,7 +64,13 @@ docker exec "$CONTAINER" ln -sfn "$PLUGIN_DIR" /var/lib/dokku/plugins/enabled/ro
 docker exec "$CONTAINER" "$PLUGIN_DIR/install"
 
 echo "-----> Verifying the plugin is dispatchable"
+running || die "Container exited while installing the plugin"
 docker exec "$CONTAINER" dokku router:help >/dev/null
 docker exec "$CONTAINER" dokku router:list
 
+# An app the tests do not own, so the summary always has something to report
+# and app-scoped assertions have a neighbour to be distinguished from.
+docker exec "$CONTAINER" dokku apps:create ci-bystander >/dev/null 2>&1 || true
+
+running || die "Container exited after the plugin was installed"
 echo "-----> Ready. Run tests with DOKKU_CONTAINER=$CONTAINER"
