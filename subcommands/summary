@@ -11,13 +11,17 @@ routing_parse_format "$@"
 
 routing_load_levels
 
+routing_list_apps >/dev/null
 APPS="$(routing_list_apps)"
 
 # Summarising every app is the one place where per-app `dokku *:report` calls
 # dominate the runtime. Fetch each report for all apps up front instead, and
 # warm the global lookups so the per-app subshells inherit them rather than
 # each recomputing.
-routing_prewarm_reports proxy domains ports checks
+routing_prewarm_field proxy proxy-computed-type
+routing_prewarm_field domains domains-app-vhosts
+routing_prewarm_field ports ports-map
+routing_prewarm_reports checks
 routing_acme_apps >/dev/null
 routing_trigger_exists || true
 

@@ -75,6 +75,51 @@ routing_report() {
   printf '%s' "${ROUTING_REPORT[$key]}"
 }
 
+# --- Single-field reports ---------------------------------------------------
+#
+# `dokku <plugin>:report --<field>` returns just one property and skips the
+# expensive work a full report does. `ports:report` inspects the app's image to
+# compute its detected ports: 11.9s across 40 apps, against 0.13s for
+# `--ports-map`, which is the only part we want.
+#
+# In bulk it prints one bare line per app, in apps:list order, with no app
+# names. We only trust that positional mapping when the line count matches the
+# app count exactly, and fall back to parsing full reports when it does not.
+
+declare -gA ROUTING_FIELD=()
+
+routing_prewarm_field() {
+  local plugin="$1" flag="$2" out apps i
+  local -a app_list value_list
+
+  apps="$(routing_list_apps)"
+  [[ -z "${apps//[[:space:]]/}" ]] && return 0
+
+  out="$("$DOKKU_BIN" "$plugin:report" "--$flag" 2>/dev/null)" || return 1
+
+  mapfile -t app_list <<<"$apps"
+  mapfile -t value_list <<<"$out"
+  [[ ${#app_list[@]} -eq ${#value_list[@]} ]] || return 1
+
+  for i in "${!app_list[@]}"; do
+    ROUTING_FIELD["$plugin|$flag|${app_list[i]}"]="${value_list[i]}"
+  done
+}
+
+# One property of one app, by whichever route is available.
+routing_field() {
+  local plugin="$1" flag="$2" label="$3" app="$4" key="$1|$2|$4" value
+  if [[ -z "${ROUTING_FIELD[$key]+set}" ]]; then
+    if value="$("$DOKKU_BIN" "$plugin:report" "$app" "--$flag" 2>/dev/null)"; then
+      ROUTING_FIELD["$key"]="${value%$'\n'}"
+    else
+      # Older Dokku, or a property this version does not expose as a flag.
+      ROUTING_FIELD["$key"]="$(routing_report_field "$(routing_report "$plugin" "$app")" "$label" || true)"
+    fi
+  fi
+  printf '%s' "${ROUTING_FIELD[$key]}"
+}
+
 # Warm every report one app needs, in the caller's shell.
 #
 # Detectors run in subshells and command substitution is itself a subshell, so
@@ -82,11 +127,10 @@ routing_report() {
 # analysis of one app costs one call per report rather than one per lookup.
 routing_prewarm_app() {
   local app="$1" proxy
-  routing_report proxy "$app" >/dev/null
   proxy="$(routing_app_proxy "$app")"
 
-  routing_report domains "$app" >/dev/null
-  routing_report ports "$app" >/dev/null
+  routing_field domains domains-app-vhosts "Domains app vhosts" "$app" >/dev/null
+  routing_field ports ports-map "Ports map" "$app" >/dev/null
   routing_report checks "$app" >/dev/null
 
   if routing_provider_exists "$proxy" && routing_provider_inspects "$proxy"; then
@@ -126,8 +170,14 @@ routing_app_exists() {
   "$DOKKU_BIN" apps:exists "$1" &>/dev/null
 }
 
+ROUTING_APPS_LOADED=""
+ROUTING_APPS=""
 routing_list_apps() {
-  routing_dokku apps:list | tail -n +2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' || true
+  [[ -n "$ROUTING_APPS_LOADED" ]] || {
+    ROUTING_APPS="$(routing_dokku apps:list | tail -n +2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' || true)"
+    ROUTING_APPS_LOADED="yes"
+  }
+  printf '%s\n' "$ROUTING_APPS"
 }
 
 # The proxy an app is currently routed through.
@@ -137,10 +187,8 @@ routing_list_apps() {
 # the global default. Reading the wrong one reports every app on the global
 # proxy as nginx.
 routing_app_proxy() {
-  local app="$1" report proxy
-  report="$(routing_report proxy "$app")"
-  proxy="$(routing_report_field "$report" "Proxy computed type" || true)"
-  [[ -z "$proxy" ]] && proxy="$(routing_report_field "$report" "Proxy type" || true)"
+  local app="$1" proxy
+  proxy="$(routing_field proxy proxy-computed-type "Proxy computed type" "$app")"
   [[ -z "$proxy" ]] && proxy="nginx"
   echo "$proxy"
 }
@@ -324,8 +372,7 @@ routing_app_capabilities() {
 routing_detect_common() {
   local app="$1" report value
 
-  report="$(routing_report domains "$app")"
-  value="$(routing_report_field "$report" "Domains app vhosts" || true)"
+  value="$(routing_field domains domains-app-vhosts "Domains app vhosts" "$app")"
   if [[ -n "$value" ]]; then
     printf 'domains\t%s\tdomains\n' "$value"
     [[ "$value" == *"*"* ]] && printf 'wildcard-domains\t%s\tdomains\n' "$value"
@@ -334,8 +381,7 @@ routing_detect_common() {
   # Port maps live in ports:report, not proxy:report. "Ports map detected" is
   # what the image exposes, which is not a routing decision -- only the
   # configured map is.
-  report="$(routing_report ports "$app")"
-  value="$(routing_report_field "$report" "Ports map" || true)"
+  value="$(routing_field ports ports-map "Ports map" "$app")"
   if [[ -n "$value" ]]; then
     printf 'port-mapping\t%s\tports:set\n' "$value"
     local mapping
