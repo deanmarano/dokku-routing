@@ -521,7 +521,7 @@ routing_detect_vendor_settings() {
 # every `$(...)` is a fork; callers in that loop read the variable instead.
 # Kept free of command substitution internally for the same reason.
 routing_classify() {
-  local cap="$1" target="$2" level ownership
+  local cap="$1" target="$2" sources="${3:-}" level ownership
   routing_load_levels
   level="${ROUTING_LEVEL["$target|$cap"]:-none}"
   ownership="${ROUTING_CAP_FIELD["$cap|ownership"]:-proxy}"
@@ -535,7 +535,90 @@ routing_classify() {
   else
     ROUTING_CLASS="translatable"
   fi
+
+  # If a plugin provided this capability and does not support the target, its
+  # own limit applies on top of the proxy's.
+  local source limit
+  for source in $sources; do
+    limit="$(routing_integration_limit "$source" "$target")"
+    [[ -n "$limit" ]] || continue
+    if [[ "$(routing_class_rank "$limit")" -gt "$(routing_class_rank "$ROUTING_CLASS")" ]]; then
+      ROUTING_CLASS="$limit"
+    fi
+  done
+
   printf '%s\n' "$ROUTING_CLASS"
+}
+
+# A capability contributed by another plugin is only as portable as that plugin.
+# Traefik can do forward auth; if the plugin providing it has no Traefik
+# integration, the app still loses its protection on the way over. The proxy
+# supporting a capability and the integration surviving are different questions.
+declare -gA ROUTING_PLUGIN_SUPPORT=()
+declare -gA ROUTING_PLUGIN_NOTE=()
+ROUTING_PLUGIN_SUPPORT_LOADED=""
+
+routing_load_plugin_support() {
+  [[ -n "$ROUTING_PLUGIN_SUPPORT_LOADED" ]] && return 0
+  ROUTING_PLUGIN_SUPPORT_LOADED="yes"
+  local plugin proxy level note
+  while IFS=$'\t' read -r plugin proxy level note; do
+    [[ -z "$plugin" ]] && continue
+    ROUTING_PLUGIN_SUPPORT["$plugin|$proxy"]="$level"
+    ROUTING_PLUGIN_NOTE["$plugin|$proxy"]="$note"
+  done <<<"$(routing_contrib_proxy_support)"
+  return 0
+}
+
+# Why a contributed capability cannot follow the app, in the contributing
+# plugin's own words. Empty when the plugin is fine with this target.
+routing_integration_reason() {
+  local sources="$1" target="$2" source plugin level
+  routing_load_plugin_support
+  for source in $sources; do
+    plugin="${source%%:*}"
+    [[ -n "$plugin" ]] || continue
+    level="${ROUTING_PLUGIN_SUPPORT["$plugin|$target"]:-}"
+    case "$level" in
+      none | partial)
+        printf '%s does not support %s: %s\n' \
+          "$plugin" "$target" "${ROUTING_PLUGIN_NOTE["$plugin|$target"]:-no integration}"
+        return 0
+        ;;
+    esac
+  done
+}
+
+# Sources look like "sso:protect"; the part before the colon names the plugin,
+# which is how a contributed capability is tied back to its declaration.
+routing_integration_limit() {
+  local source="$1" target="$2" plugin level
+  plugin="${source%%:*}"
+  [[ -n "$plugin" ]] || return 0
+  routing_load_plugin_support
+  level="${ROUTING_PLUGIN_SUPPORT["$plugin|$target"]:-}"
+  case "$level" in
+    none) echo "unsupported" ;;
+    partial) echo "manual" ;;
+  esac
+  return 0
+}
+
+# Severity ordering, so a limit can only ever make a verdict worse.
+routing_class_rank() {
+  case "$1" in
+    portable) echo 0 ;;
+    translatable) echo 1 ;;
+    manual) echo 2 ;;
+    unsupported) echo 3 ;;
+    *) echo -1 ;;
+  esac
+}
+
+# Every source that reported a capability for this app, space separated.
+routing_capability_sources() {
+  local detected="$1" cap="$2"
+  awk -F'\t' -v c="$cap" '$1==c {print $3}' <<<"$detected" | sort -u | tr '\n' ' '
 }
 
 routing_class_symbol() {

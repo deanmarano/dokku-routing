@@ -75,7 +75,8 @@ analyze() {
     local worst="portable"
     while read -r key; do
       [[ -z "$key" ]] && continue
-      routing_classify "$key" "$target" >/dev/null; class="$ROUTING_CLASS"
+      routing_classify "$key" "$target" "$(routing_capability_sources "$detected" "$key")" >/dev/null
+      class="$ROUTING_CLASS"
       case "$class" in
         unsupported) worst="unsupported" ;;
         manual) [[ "$worst" != "unsupported" ]] && worst="manual" ;;

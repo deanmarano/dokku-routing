@@ -52,7 +52,7 @@ used_caps() {
 declare -a PORTABLE=() TRANSLATABLE=() MANUAL=() UNSUPPORTED=()
 while read -r key; do
   [[ -z "$key" ]] && continue
-  case "$(routing_classify "$key" "$TARGET")" in
+  case "$(routing_classify "$key" "$TARGET" "$(routing_capability_sources "$DETECTED" "$key")")" in
     portable) PORTABLE+=("$key") ;;
     translatable) TRANSLATABLE+=("$key") ;;
     manual) MANUAL+=("$key") ;;
@@ -67,9 +67,19 @@ print_bucket() {
   [[ ${#keys[@]} -eq 0 ]] && return 0
 
   printf '%s %s (%d)\n' "$(routing_class_symbol "$class")" "$(routing_class_label "$class")" "${#keys[@]}"
-  local key note
+  local key note reason
   for key in "${keys[@]}"; do
     printf '   %-31s %s\n' "$(routing_capability_label "$key")" "$(details_for "$key")"
+
+    # When the plugin that provides a capability is the thing that cannot
+    # follow, say so. Otherwise the proxy's note ("forwardAuth middleware")
+    # reads as a flat contradiction of the verdict beside it.
+    reason="$(routing_integration_reason "$(routing_capability_sources "$DETECTED" "$key")" "$TARGET")"
+    if [[ -n "$reason" ]]; then
+      printf '   %-31s -> %s\n' "" "$reason"
+      continue
+    fi
+
     note="$(routing_provider_note "$TARGET" "$key")"
     [[ -n "$note" ]] && printf '   %-31s -> %s: %s\n' "" "$TARGET" "$note"
   done

@@ -72,9 +72,12 @@ printf 'sso\ttraefik\tfull\tforwardAuth middleware\n'
 printf 'sso\tcaddy\tnone\tno Caddy integration yet\n'
 ```
 
-This is what makes `routing:plan myapp traefik` able to say that moving the app
-would also require moving your plugin's integration -- without `routing` knowing
-your plugin exists.
+This is load-bearing, not decorative. A capability you contribute is only as
+portable as you are: Traefik grades forward auth as fully supported, so without
+this declaration `routing:plan myapp traefik` would cheerfully approve moving an
+app straight out from under its SSO integration. Declaring `none` downgrades
+that capability to unsupported for Traefik, and the plan quotes your note as the
+reason -- all without `routing` knowing your plugin exists.
 
 ## Channel 2: drop-in files
 

@@ -89,6 +89,30 @@ describe('third-party capability contributions', () => {
     dokku.runHostShell(`rm -f ${confDir}/one.conf ${confDir}/two.conf`);
   });
 
+  it('blocks a target the proxy supports but the contributing plugin does not', async () => {
+    // Traefik's own matrix grades forward-auth as fully supported. The fixture
+    // declares no Traefik integration, so the app still cannot move: the
+    // capability is only as portable as whatever provides it.
+    const data = await dokku.json('report', APP);
+    const traefik = data.portability.traefik.find((c: any) => c.key === 'forward-auth');
+
+    expect(traefik.target_support).toBe('full');
+    expect(traefik.classification).toBe('unsupported');
+  });
+
+  it('explains the blocker in the plugin\'s terms, not the proxy\'s', async () => {
+    const result = await dokku.exec('plan', APP, 'traefik');
+    expect(result.stdout).toContain('test-fixture does not support traefik');
+    expect(result.stdout).toContain('no forwardAuth wiring');
+  });
+
+  it('leaves the verdict alone for a target the plugin has not mentioned', async () => {
+    // The fixture says nothing about caddy, so only the proxy's own grade counts.
+    const data = await dokku.json('report', APP);
+    const caddy = data.portability.caddy.find((c: any) => c.key === 'forward-auth');
+    expect(caddy.classification).not.toBe('unsupported');
+  });
+
   it('surfaces declared proxy support in routing:list', async () => {
     const data = await dokku.json('list');
     const rows = data.contributions.filter((c: any) => c.plugin === 'test-fixture');
