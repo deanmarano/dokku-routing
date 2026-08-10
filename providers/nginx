@@ -67,8 +67,16 @@ proxy_detect() {
     [[ -n "$value" ]] && printf 'buffering\t%s=%s\tnginx:set\n' "${key// /-}" "$value"
   done
 
+  # HSTS is a behaviour the target has to reproduce whether it was switched on
+  # for this app or inherited from the global default, so fall back to the
+  # computed value rather than reporting nothing.
+  local hsts_source="nginx:set"
   value="$(routing_report_field "$report" "Nginx hsts" || true)"
-  [[ "$value" == "true" ]] && printf 'hsts\tenabled\tnginx:set\n'
+  if [[ -z "$value" ]]; then
+    value="$(routing_report_field "$report" "Nginx computed hsts" || true)"
+    hsts_source="nginx:set --global"
+  fi
+  [[ "$value" == "true" ]] && printf 'hsts\tenabled\t%s\n' "$hsts_source"
 
   for key in "x forwarded for value" "x forwarded port value" "x forwarded proto value" "x forwarded ssl"; do
     value="$(routing_report_field "$report" "Nginx $key" || true)"
@@ -85,9 +93,21 @@ proxy_detect() {
   local sigil="$DOKKU_ROOT/$app/nginx.conf.sigil"
   [[ -f "$sigil" ]] && printf 'raw-config\t%s\tcustom template\n' "$sigil"
 
-  local extra
+  # nginx.conf.d holds hand-written config, but not only that: Dokku and other
+  # plugins generate files here too. Generated config is not opaque -- something
+  # already knows what it means -- so attribute it rather than calling it
+  # hand-written and blocking the migration over it.
+  local extra owned
+  owned="$(routing_owned_config_paths "$app")"
   for extra in "$DOKKU_ROOT/$app/nginx.conf.d"/*.conf; do
     [[ -f "$extra" ]] || continue
+
+    # nginx-vhosts writes this from the hsts properties, which are reported
+    # as their own capability above.
+    [[ "$(basename "$extra")" == "hsts.conf" ]] && continue
+
+    grep -qxF "$extra" <<<"$owned" && continue
+
     printf 'raw-config\t%s\tnginx.conf.d\n' "$extra"
   done
 

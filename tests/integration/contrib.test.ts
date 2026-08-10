@@ -16,6 +16,10 @@ contrib_proxy_support() {
   printf 'test-fixture\\tnginx\\tfull\\tauth_request\\n'
   printf 'test-fixture\\ttraefik\\tnone\\tno forwardAuth wiring\\n'
 }
+
+contrib_owned_config() {
+  echo "/home/dokku/$1/nginx.conf.d/generated-by-plugin.conf"
+}
 `;
 
 describe('third-party capability contributions', () => {
@@ -53,6 +57,36 @@ describe('third-party capability contributions', () => {
     const result = await dokku.exec('plan', APP, 'haproxy');
     expect(result.stdout).toContain('Forward authentication');
     expect(result.stdout).toContain('Blocked.');
+  });
+
+  it('treats a claimed config file as the plugin\'s business, not hand-written', async () => {
+    const confDir = `/home/dokku/${APP}/nginx.conf.d`;
+    dokku.runHostShell(`mkdir -p ${confDir}`);
+    dokku.writeHostFile(`${confDir}/generated-by-plugin.conf`, '# generated\n');
+    dokku.writeHostFile(`${confDir}/by-hand.conf`, '# written by a person\n');
+
+    const data = await dokku.json('report', APP);
+    const raw = data.capabilities.filter((c: any) => c.key === 'raw-config');
+
+    // The fixture claims generated-by-plugin.conf via contrib_owned_config.
+    expect(raw.some((c: any) => c.detail.includes('by-hand.conf'))).toBe(true);
+    expect(raw.some((c: any) => c.detail.includes('generated-by-plugin.conf'))).toBe(false);
+
+    dokku.runHostShell(`rm -f ${confDir}/generated-by-plugin.conf ${confDir}/by-hand.conf`);
+  });
+
+  it('reports every hand-written file, not just the first', async () => {
+    const confDir = `/home/dokku/${APP}/nginx.conf.d`;
+    dokku.runHostShell(`mkdir -p ${confDir}`);
+    dokku.writeHostFile(`${confDir}/one.conf`, '# one\n');
+    dokku.writeHostFile(`${confDir}/two.conf`, '# two\n');
+
+    const data = await dokku.json('report', APP);
+    const raw = data.capabilities.filter((c: any) => c.key === 'raw-config');
+    expect(raw.some((c: any) => c.detail.includes('one.conf'))).toBe(true);
+    expect(raw.some((c: any) => c.detail.includes('two.conf'))).toBe(true);
+
+    dokku.runHostShell(`rm -f ${confDir}/one.conf ${confDir}/two.conf`);
   });
 
   it('surfaces declared proxy support in routing:list', async () => {

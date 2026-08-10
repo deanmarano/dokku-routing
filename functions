@@ -176,17 +176,19 @@ routing_app_has_acme() {
   [[ "${ROUTING_ACME_APP[$app]}" == "true" ]]
 }
 
-# Does any installed plugin implement our trigger? Asking plugn per app when
-# nothing implements it is pure overhead.
-ROUTING_TRIGGER_CHECKED=""
-ROUTING_TRIGGER_EXISTS=""
+# Does any installed plugin implement one of our triggers? Asking plugn per app
+# when nothing implements it is pure overhead.
+declare -gA ROUTING_TRIGGER=()
 routing_trigger_exists() {
-  [[ -n "$ROUTING_TRIGGER_CHECKED" ]] || {
-    ROUTING_TRIGGER_CHECKED="yes"
-    compgen -G "${DOKKU_LIB_ROOT:-/var/lib/dokku}/plugins/enabled/*/routing-app-capabilities" \
-      >/dev/null && ROUTING_TRIGGER_EXISTS="yes"
-  }
-  [[ -n "$ROUTING_TRIGGER_EXISTS" ]]
+  local name="${1:-routing-app-capabilities}"
+  if [[ -z "${ROUTING_TRIGGER[$name]+set}" ]]; then
+    if compgen -G "${DOKKU_LIB_ROOT:-/var/lib/dokku}/plugins/enabled/*/$name" >/dev/null; then
+      ROUTING_TRIGGER["$name"]="yes"
+    else
+      ROUTING_TRIGGER["$name"]=""
+    fi
+  fi
+  [[ -n "${ROUTING_TRIGGER[$name]}" ]]
 }
 
 routing_app_exists() {
@@ -361,6 +363,39 @@ routing_contrib_app_capabilities() {
   done
 }
 
+# Config files another plugin generates for this app.
+#
+# A file in nginx.conf.d is opaque to us, so it forces manual review -- rightly,
+# when a human wrote it. But when a plugin generated it, that plugin already
+# knows what it means and says so through routing-app-capabilities. Claiming the
+# file here says "this is mine, and I have already told you what it does",
+# which keeps generated config from masquerading as hand-written config.
+#
+# Emits one absolute path per line.
+routing_owned_config_paths() {
+  local app="$1" f
+
+  if routing_trigger_exists routing-owned-config && command -v "$PLUGN_BIN" &>/dev/null; then
+    "$PLUGN_BIN" trigger routing-owned-config "$app" 2>/dev/null || true
+  fi
+
+  for f in "$PLUGIN_CONTRIB_ROOT"/*.sh; do
+    [[ -f "$f" ]] || continue
+    (
+      # shellcheck source=/dev/null
+      source "$f"
+      declare -F contrib_owned_config >/dev/null || exit 0
+      contrib_owned_config "$app"
+    )
+  done
+}
+
+# True if some other plugin has claimed this config file.
+routing_config_is_owned() {
+  local app="$1" path="$2"
+  routing_owned_config_paths "$app" | grep -qxF "$path"
+}
+
 # Which proxies other plugins say they work with.
 # Emits "plugin<TAB>proxy<TAB>level<TAB>note".
 routing_contrib_proxy_support() {
@@ -388,7 +423,7 @@ routing_app_capabilities() {
   {
     routing_provider_detect "$proxy" "$app"
     routing_contrib_app_capabilities "$app"
-  } | awk -F'\t' 'NF>=1 && $1!="" && !seen[$1 FS $3]++'
+  } | awk -F'\t' 'NF>=1 && $1!="" && !seen[$1 FS $2 FS $3]++'
 }
 
 # ---------------------------------------------------------------------------

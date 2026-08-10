@@ -22,3 +22,10 @@ contrib_proxy_support() {
   printf 'sso\tnginx\tfull\tauth_request via nginx-pre-reload\n'
   printf 'sso\ttraefik\tnone\tno forwardAuth wiring yet\n'
 }
+
+# Config files this plugin generates for an app.
+# Emit: one absolute path per line.
+contrib_owned_config() {
+  local app="$1"
+  echo "/home/dokku/$app/nginx.conf.d/forward-auth.conf"
+}

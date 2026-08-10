@@ -35,6 +35,28 @@ printf 'vendor-settings\tbypass paths configured\tsso:bypass\n'
 
 Emitting nothing for an unaffected app is correct and expected.
 
+### `routing-owned-config <app>`
+
+Emit one absolute path per line for each config file your plugin generates for
+this app.
+
+```bash
+#!/usr/bin/env bash
+set -eo pipefail
+APP="$1"
+echo "/home/dokku/$APP/nginx.conf.d/forward-auth.conf"
+```
+
+A file in `nginx.conf.d` is opaque to `routing`, so by default it forces manual
+review and blocks migration to proxies with no template mechanism. That is right
+when a human wrote it and wrong when your plugin generated it. Claiming the file
+says "this is mine, and `routing-app-capabilities` has already told you what it
+means", so the app is judged on the capability rather than on a file nobody can
+read.
+
+Only claim files you actually write. Claiming one a user hand-edited would hide
+a real migration blocker.
+
 ### `routing-proxy-support`
 
 Emit which proxies your plugin itself works with. No arguments.
